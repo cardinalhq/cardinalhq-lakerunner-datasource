@@ -5,7 +5,7 @@ import {
 } from '../util/QueryUtils';
 
 const BASE_URL = 'https://app.cardinalhq.io';
-const API_KEY = 'REDACTED_API_KEY';
+const API_KEY = '';
 
 async function streamJsonCollect(
   url: string,

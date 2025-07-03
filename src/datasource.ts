@@ -16,7 +16,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
 
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
     super(instanceSettings);
-    this.apiKey = 'REDACTED_API_KEY';
+    this.apiKey = '';
     this.apiUrl = 'https://app.cardinalhq.io';
   }
 
