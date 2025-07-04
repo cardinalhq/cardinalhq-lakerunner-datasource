@@ -1,10 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchTagKeys } from 'services/logs';
+import type { Filter } from '../types';
 
-export function useLogLabels({ enabled }: { enabled: boolean }) {
+interface UseLogLabelsProps {
+  enabled: boolean;
+  filters?: Filter[];
+}
+
+export function useLogLabels({ enabled, filters = [] }: UseLogLabelsProps) {
   const { data = [], isLoading } = useQuery<string[], Error>({
-    queryKey: ['log-labels', 'e-1h-to-now'],
-    queryFn: ({ signal }) => fetchTagKeys({ useRelativeTime: true, signal }),
+    queryKey: ['log-labels', 'e-1h-to-now', filters],
+    queryFn: ({ signal }) =>
+      fetchTagKeys({ useRelativeTime: true, filters, signal }),
     enabled,
     staleTime: Infinity,
     refetchOnMount: false,

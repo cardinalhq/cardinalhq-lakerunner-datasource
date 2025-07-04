@@ -1,22 +1,39 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchTagValues } from 'services/logs';
+import type { Filter } from '../types';
+
+interface UseLabelValuesProps {
+  labelName: string;
+  enabled: boolean;
+  filters?: Filter[];
+}
 
 export function useLabelValues({
   labelName,
   enabled,
-}: {
-  labelName: string;
-  enabled: boolean;
-}) {
+  filters = [],
+}: UseLabelValuesProps) {
+  const shouldRun = enabled && !!labelName;
+
+  console.log('[useLabelValues] called with:', {
+    labelName,
+    enabled,
+    filters,
+    shouldRun,
+  });
+
   const { data = [], isLoading } = useQuery<string[], Error>({
-    queryKey: ['log-label-values', labelName],
+    queryKey: ['log-label-values', labelName, filters],
     queryFn: ({ signal }) =>
-      fetchTagValues({ labelName, useRelativeTime: true, signal }),
-    enabled: enabled && Boolean(labelName),
-    staleTime: Infinity,
-    refetchOnMount: false,
+      fetchTagValues({
+        labelName,
+        filters,
+        useRelativeTime: true,
+        signal,
+      }),
+    enabled: shouldRun,
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
   });
 
   return { data, isLoading };

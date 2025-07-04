@@ -1,84 +1,97 @@
-import React, { useState, useEffect } from 'react';
-import { InlineField, InlineFieldRow, Stack, Combobox } from '@grafana/ui';
+import React from 'react';
+import {
+  Button,
+  MultiSelect,
+  InlineFieldRow,
+} from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from '../datasource';
-import { MyDataSourceOptions, MyQuery } from '../types';
+import {
+  MyDataSourceOptions,
+  MyQuery,
+  Filter,
+  Operator,
+} from '../types';
 import { useLogLabels } from '../hooks/useLabels';
-import { useLabelValues } from '../hooks/useValues';
+import { FilterRow } from './FilterRow';
 
 export function QueryEditor({
   query,
   onChange,
   onRunQuery,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
-  const [label, setLabel] = useState(query.tag ?? '');
-  const [operator, setOperator] = useState(query.op ?? '=');
-  const [value, setValue] = useState(query.value?.[0] ?? '');
+  const filters: Filter[] = query.filters ?? [];
 
-  const { data: labels = [], isLoading: loadingLabels } = useLogLabels({ enabled: true });
-  const { data: values = [], isLoading: loadingValues } = useLabelValues({
-    labelName: label,
-    enabled: !!label,
+  const { data: labels = [], isLoading: loadingLabels } = useLogLabels({
+    enabled: true,
+    filters,
   });
 
-  useEffect(() => {
-    onChange({ ...query, tag: label, op: operator, value: [value] });
-  }, [label, operator, value]);
+  const updateFilter = (index: number, patch: Partial<Filter>) => {
+    const updated = [...filters];
+    updated[index] = { ...updated[index], ...patch };
+    onChange({ ...query, filters: updated });
+    onRunQuery();
+  };
+
+  const addFilter = () => {
+    const defaultTag = labels[0] ?? '';
+    const updated = [
+      ...filters,
+      { tag: defaultTag, op: '=' as Operator, value: [''] },
+    ];
+    onChange({ ...query, filters: updated });
+    onRunQuery();
+  };
+
+  const removeFilter = (index: number) => {
+    const updated = [...filters];
+    updated.splice(index, 1);
+    onChange({ ...query, filters: updated });
+    onRunQuery();
+  };
 
   return (
-    <Stack gap={1}>
-      <InlineField label="Log Filter">
-        <InlineFieldRow>
-          <Combobox
-            options={
-              loadingLabels
-                ? [{ label: 'Loading tags...', value: '__loading' }]
-                : labels.map((l: any) => ({ label: l, value: l }))
-            }
-            value={label}
+    <div>
+      {filters.map((filter, index) => (
+        <FilterRow
+          key={index}
+          index={index}
+          filter={filter}
+          filters={filters}
+          labels={labels}
+          loadingLabels={loadingLabels}
+          updateFilter={updateFilter}
+          removeFilter={removeFilter}
+          onRunQuery={onRunQuery}
+        />
+      ))}
+
+      <InlineFieldRow style={{ flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+        <div>
+          <MultiSelect
+            placeholder="Group by"
+            options={labels.map((l) => ({ label: l, value: l }))}
+            value={query.groupBy ?? []}
             onChange={(v) => {
-              const selected = v?.value ?? '';
-              setLabel(selected);
-              setValue('');
-              onRunQuery(); 
-            }}
-            placeholder="Tag"
-            loading={loadingLabels}
-          />
-          <Combobox
-            options={[
-              { label: '=', value: '=' },
-              { label: '!=', value: '!=' },
-              { label: 'in', value: 'in' },
-              { label: 'not in', value: 'not_in' },
-            ]}
-            value={operator}
-            width={8}
-            onChange={(v) => {
-              setOperator(v?.value ?? '=');
+              const selected = v.map((item) => item.value).filter((val): val is string => Boolean(val));
+              onChange({
+                ...query,
+                groupBy: selected,
+              });
               onRunQuery();
             }}
-            placeholder="Operator"
-            disabled={!label}
           />
-          <Combobox
-            options={
-              loadingValues
-                ? [{ label: 'Loading values...', value: '__loading' }]
-                : values.map((v: any) => ({ label: v, value: v }))
-            }
-            value={value}
-            onChange={(v) => {
-              if (v?.value === '__loading') return;
-              setValue(v?.value ?? '');
-              onRunQuery();
-            }}
-            placeholder="Value"
-            loading={loadingValues}
-            disabled={!label}
-          />
-        </InlineFieldRow>
-      </InlineField>
-    </Stack>
+        </div>
+        <Button
+          icon="plus"
+          variant="secondary"
+          onClick={addFilter}
+          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+        >
+          Add Filter
+        </Button>
+      </InlineFieldRow>
+      </div>
   );
 }

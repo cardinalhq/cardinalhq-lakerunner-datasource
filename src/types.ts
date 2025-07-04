@@ -6,22 +6,18 @@ export type Operator = '=' | '!=' | 'in' | 'not_in';
 export interface Filter {
   tag: string;
   op: Operator;
-  value: string;
+  value: string[];
 }
+
 export interface MyQuery extends DataQuery {
   filters?: Filter[];
   groupBy?: string[];
-  tag?: string;
-  op?: Operator;
-  value?: string[];
-
   queryText?: string;
   constant?: number;
 }
 
 export const DEFAULT_QUERY: Partial<MyQuery> = {
-  op: '=',
-  value: [],
+  filters: [],
 };
 
 export interface DataPoint {
@@ -40,6 +36,8 @@ export interface MyDataSourceOptions extends DataSourceJsonData {
 export interface MySecureJsonData {
   apiKey?: string;
 }
+
+// For advanced use (explore style payloads)
 export interface ExploreQuery {
   id: string;
   dataset: 'logs' | 'metrics' | 'spans';

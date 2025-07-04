@@ -1,11 +1,12 @@
-import { ExploreQuery } from '../types';
+import { Filter } from '../types';
 import {
   apiFetchEventSourceWrapper,
   EventSourceOptions,
 } from '../util/QueryUtils';
+import { buildNestedFilter } from '../util/buildNestedFilter';
 
 const BASE_URL = 'https://app.cardinalhq.io';
-const API_KEY = '';
+const API_KEY = 'REDACTED_API_KEY';
 
 async function streamJsonCollect(
   url: string,
@@ -41,17 +42,18 @@ async function streamJsonCollect(
     apiFetchEventSourceWrapper(url, opts);
   });
 }
+
 export async function fetchTagKeys({
   useRelativeTime = false,
   startTime,
   endTime,
-  query,
+  filters = [],
   signal,
 }: {
   useRelativeTime?: boolean;
   startTime?: number;
   endTime?: number;
-  query?: ExploreQuery;
+  filters?: Filter[];
   signal?: AbortSignal;
 }): Promise<string[]> {
   const keys = new Set<string>();
@@ -59,7 +61,17 @@ export async function fetchTagKeys({
     ? `${BASE_URL}/api/v1/tags/logs?s=e-1h&e=now`
     : `${BASE_URL}/api/v1/tags/logs?s=${startTime}&e=${endTime}`;
 
-  const body = useRelativeTime ? undefined : (query?.params?.filters?.length ? query : undefined);
+  const body = useRelativeTime
+    ? undefined
+    : filters.length > 0
+    ? {
+        dataset: 'logs',
+        filter: buildNestedFilter(filters),
+        limit: 1000,
+        order: 'DESC',
+        returnResults: true,
+      }
+    : undefined;
 
   await streamJsonCollect(
     url,
@@ -78,12 +90,15 @@ export async function fetchTagKeys({
 
   return Array.from(keys);
 }
+
 export async function fetchTagValues({
   labelName,
+  filters = [],
   useRelativeTime = false,
   signal,
 }: {
   labelName: string;
+  filters?: Filter[];
   useRelativeTime?: boolean;
   signal?: AbortSignal;
 }): Promise<string[]> {
@@ -93,19 +108,23 @@ export async function fetchTagValues({
 
   const vals = new Set<string>();
   const url = `${BASE_URL}/api/v1/tags/logs?s=e-1h&e=now&tagName=${encodeURIComponent(
-    labelName,
+    labelName
   )}&dataType=string`;
+
+  const nestedFilter = buildNestedFilter(filters);
 
   const body = {
     dataset: 'logs',
-    filter: {
-      k: labelName,
-      v: [''],
-      op: 'has',
-      dataType: 'string',
-      extracted: false,
-      computed: false,
-    },
+    filter:
+      nestedFilter ??
+      {
+        k: labelName,
+        v: [''],
+        op: 'has',
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      },
     limit: 1000,
     order: 'DESC',
     returnResults: true,
@@ -124,7 +143,7 @@ export async function fetchTagValues({
         vals.add(String(value));
       }
     },
-    signal,
+    signal
   );
 
   return Array.from(vals);
