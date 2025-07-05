@@ -156,7 +156,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
                     }
                   }
 
-                  const label = labelParts.length > 0 ? labelParts.join(', ') : 'total';
+                  const label = labelParts.length > 0 ? labelParts.join(', ') : 'log.events';
 
                   if (!frameData[label]) {
                     frameData[label] = { timestamps: [], values: [] };

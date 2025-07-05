@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import {
   MultiSelect,
   InlineFieldRow,
@@ -20,7 +20,8 @@ export function QueryEditor({
   onChange,
   onRunQuery,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
-  const filters: Filter[] = query.filters ?? [];
+  
+  const filters: Filter[] = useMemo(() => query.filters ?? [], [query.filters]);
 
   const { data: labels = [], isLoading: loadingLabels } = useLogLabels({
     enabled: true,
