@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
-  Button,
   MultiSelect,
   InlineFieldRow,
+  InlineField,
 } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from '../datasource';
@@ -27,6 +27,17 @@ export function QueryEditor({
     filters,
   });
 
+  useEffect(() => {
+    if (filters.length === 0 && labels.length > 0) {
+      const defaultTag = labels[0];
+      onChange({
+        ...query,
+        filters: [{ tag: defaultTag, op: '=' as Operator, value: [''] }],
+      });
+      onRunQuery();
+    }
+  }, [filters, labels, query, onChange, onRunQuery]);
+
   const updateFilter = (index: number, patch: Partial<Filter>) => {
     const updated = [...filters];
     updated[index] = { ...updated[index], ...patch };
@@ -36,10 +47,7 @@ export function QueryEditor({
 
   const addFilter = () => {
     const defaultTag = labels[0] ?? '';
-    const updated = [
-      ...filters,
-      { tag: defaultTag, op: '=' as Operator, value: [''] },
-    ];
+    const updated = [...filters, { tag: defaultTag, op: '=' as Operator, value: [''] }];
     onChange({ ...query, filters: updated });
     onRunQuery();
   };
@@ -63,14 +71,16 @@ export function QueryEditor({
           loadingLabels={loadingLabels}
           updateFilter={updateFilter}
           removeFilter={removeFilter}
+          addFilter={addFilter}
           onRunQuery={onRunQuery}
         />
+      
       ))}
 
-      <InlineFieldRow style={{ flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
-        <div>
+      <InlineFieldRow style={{ marginTop: 8, alignItems: 'center' }}>
+        <InlineField label="Group by" grow>
           <MultiSelect
-            placeholder="Group by"
+            placeholder="Select labels"
             options={labels.map((l) => ({ label: l, value: l }))}
             value={query.groupBy ?? []}
             onChange={(v) => {
@@ -81,17 +91,10 @@ export function QueryEditor({
               });
               onRunQuery();
             }}
+            width={40}
           />
-        </div>
-        <Button
-          icon="plus"
-          variant="secondary"
-          onClick={addFilter}
-          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-        >
-          Add Filter
-        </Button>
+        </InlineField>
       </InlineFieldRow>
-      </div>
+    </div>
   );
 }

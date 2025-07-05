@@ -14,14 +14,6 @@ export function useLabelValues({
   filters = [],
 }: UseLabelValuesProps) {
   const shouldRun = enabled && !!labelName;
-
-  console.log('[useLabelValues] called with:', {
-    labelName,
-    enabled,
-    filters,
-    shouldRun,
-  });
-
   const { data = [], isLoading } = useQuery<string[], Error>({
     queryKey: ['log-label-values', labelName, filters],
     queryFn: ({ signal }) =>
