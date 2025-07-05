@@ -102,7 +102,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
 
           if (!response.body) {
             subscriber.error(new Error('No response body'));
-            return;
+            return; // also preserve behavior from original code
           }
 
           const reader = response.body.getReader();
@@ -123,7 +123,9 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
 
           while (true) {
             const { value, done } = await reader.read();
-            if (done) break;
+            if (done) {
+              break;
+            }
 
             partial += decoder.decode(value, { stream: true });
             const lines = partial.split('\n');
@@ -131,7 +133,9 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
 
             for (const line of lines) {
               const cleaned = line.trim();
-              if (!cleaned.startsWith('data:')) continue;
+              if (!cleaned.startsWith('data:')) {
+                continue;
+              }
 
               try {
                 const parsed = JSON.parse(cleaned.slice(5).trim());
