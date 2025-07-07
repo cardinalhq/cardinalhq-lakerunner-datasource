@@ -54,39 +54,61 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
 
     return targets.length ? { ...request, targets } : undefined;
   }
+
   query(request: DataQueryRequest<MyQuery>): Observable<DataQueryResponse> {
     return new Observable<DataQueryResponse>((subscriber) => {
       const run = async () => {
         const target = request.targets[0];
-        const filters: Filter[] = target.filters ?? [];
+        const isMetrics = target.mode === 'metrics';
+        const filters: Filter[] = [...(target.filters ?? [])];
         const groupBy: string[] = target.groupBy ?? [];
 
+        if (isMetrics && target.metricName) {
+          filters.unshift({
+            tag: '_cardinalhq.name',
+            op: '=', 
+            value: [target.metricName],
+          });
+          
+        }
 
-        const nestedFilter = buildNestedFilter(filters);
-        if (!nestedFilter) {
-          subscriber.complete();
-          return;
+        let nestedFilter = buildNestedFilter(filters);
+        if (!nestedFilter && !isMetrics) {
+          nestedFilter = {
+            k: '_cardinalhq.name',
+            v: [''],
+            op: 'has',
+            dataType: 'string',
+            extracted: false,
+            computed: false,
+          };
         }
 
         const from = request.range?.from.valueOf();
         const to = request.range?.to.valueOf();
         const url = `${this.apiUrl}/api/v1/graph?s=${from}&e=${to}`;
 
+        const dataset = isMetrics ? 'metrics' : 'logs';
+
+        const expression: any = {
+          dataset,
+          returnResults: true,
+          filter: nestedFilter,
+          chart: {
+            aggregation: isMetrics ? 'max' : 'sum',
+            rollup: isMetrics ? 'max' : 'sum',
+            groupBys: groupBy,
+            type: isMetrics ? 'count' : 'rate',
+          },
+        };
+
+        if (isMetrics && target.metricType) {
+          expression.metricType = target.metricType;
+        }
+
         const payload = {
           baseExpressions: {
-            a: {
-              dataset: 'logs',
-              limit: 1000,
-              order: 'DESC',
-              returnResults: true,
-              filter: nestedFilter,
-              chart: {
-                aggregation: 'sum',
-                rollup: 'sum',
-                groupBys: groupBy,
-                type: 'rate',
-              },
-            },
+            a: expression,
           },
         };
 
@@ -102,7 +124,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
 
           if (!response.body) {
             subscriber.error(new Error('No response body'));
-            return; // also preserve behavior from original code
+            return;
           }
 
           const reader = response.body.getReader();
@@ -110,11 +132,9 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
           let partial = '';
           const isVolume = target.queryText === 'volume' || target.refId.startsWith('volume-');
 
-          // LogsVolume
           const frameData: Record<string, { timestamps: number[]; values: number[] }> = {};
           let emitCount = 0;
 
-          // LogsSample
           const timestamps: number[] = [];
           const bodies: string[] = [];
           const severities: string[] = [];
@@ -123,9 +143,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
 
           while (true) {
             const { value, done } = await reader.read();
-            if (done) {
-              break;
-            }
+            if (done) {break;}
 
             partial += decoder.decode(value, { stream: true });
             const lines = partial.split('\n');
@@ -133,34 +151,27 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
 
             for (const line of lines) {
               const cleaned = line.trim();
-              if (!cleaned.startsWith('data:')) {
-                continue;
-              }
+              if (!cleaned.startsWith('data:')){ continue;}
 
               try {
                 const parsed = JSON.parse(cleaned.slice(5).trim());
                 const msg = parsed.message;
 
-                if (isVolume) {
+                if (isMetrics || isVolume) {
                   const ts = msg.timestamp;
                   const val = msg.value ?? 0;
                   const tags = msg.tags ?? {};
 
                   const labelParts: string[] = [];
-
                   for (const key of groupBy) {
                     const value = tags[key];
                     const prettyKey = key.replace(/^_cardinalhq\./, '');
-
-                    if (value !== undefined) {
-                      labelParts.push(`${prettyKey}=${value}`);
-                    } else {
-                      console.warn(`Missing tag for groupBy key '${key}'`, { tags });
-                      labelParts.push(`${prettyKey}=unknown`);
-                    }
+                    labelParts.push(`${prettyKey}=${value ?? 'unknown'}`);
                   }
 
-                  const label = labelParts.length > 0 ? labelParts.join(', ') : 'log.events';
+                  const label = labelParts.length > 0
+                    ? labelParts.join(', ')
+                    : (isMetrics ? target.metricName ?? 'metric' : 'log.events');
 
                   if (!frameData[label]) {
                     frameData[label] = { timestamps: [], values: [] };
@@ -171,16 +182,15 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
 
                   emitCount++;
                   if (emitCount % 10 === 0) {
-
                     const palette = [
                       '#7EB26D', '#EAB839', '#6ED0E0', '#EF843C', '#E24D42', '#1F78C1',
                       '#BA43A9', '#705DA0', '#508642', '#CCA300', '#447EBC', '#C15C17',
                     ];
-                    
-                    const frames = Object.entries(frameData).map(([label, series], idx) =>
-                      toDataFrame({
-                        refId: `${target.refId}-${idx}`, 
-                        name: label,                    
+
+                    const frames = Object.entries(frameData).map(([label, series], idx) => {
+                      const frame = toDataFrame({
+                        refId: `${target.refId}-${idx}`,
+                        name: label,
                         fields: [
                           { name: 'Time', type: FieldType.time, values: series.timestamps },
                           {
@@ -188,7 +198,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
                             type: FieldType.number,
                             values: series.values,
                             config: {
-                              displayName: label, 
+                              displayName: label,
                               color: {
                                 mode: 'fixed',
                                 fixedColor: palette[idx % palette.length],
@@ -196,22 +206,26 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
                             },
                           },
                         ],
-                      })
-                    );                    
-                    
+                      });
+
+                      frame.meta = {
+                        preferredVisualisationType: 'graph',
+                      };
+
+                      return frame;
+                    });
+
                     subscriber.next({ data: frames });
                   }
                 } else {
-                  if (parsed.type !== 'event') {
-                    continue; 
-                  }
-                  
+                  if (parsed.type !== 'event') {continue;}
+
                   const ts = msg.timestamp;
                   const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
                   const severity = msg.tags?.['_cardinalhq.level'] || '';
                   const id = msg.tags?.['_cardinalhq.id'] || '';
                   const labelTags = msg.tags || {};
-                  
+
                   timestamps.push(ts);
                   bodies.push(body);
                   severities.push(severity);
@@ -221,7 +235,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
                   if (timestamps.length % 10 === 0) {
                     const frame = toDataFrame({
                       refId: target.refId,
-                      name: labels,
+                      name: 'logs',
                       fields: [
                         { name: 'timestamp', type: FieldType.time, values: timestamps },
                         { name: 'body', type: FieldType.string, values: bodies },
@@ -245,7 +259,8 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
               }
             }
           }
-          if (!isVolume && timestamps.length > 0) {
+
+          if (!isMetrics && timestamps.length > 0) {
             const finalFrame = toDataFrame({
               refId: target.refId,
               name: 'logs',
@@ -276,6 +291,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
           }
         }
       };
+
       run();
     });
   }

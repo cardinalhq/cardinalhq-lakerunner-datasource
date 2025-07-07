@@ -6,27 +6,46 @@ interface UseLabelValuesProps {
   labelName: string;
   enabled: boolean;
   filters?: Filter[];
+  mode?: 'logs' | 'metrics';
+  metricName?: string;
+  metricType?: string;
 }
-
 export function useLabelValues({
   labelName,
   enabled,
   filters = [],
+  mode = 'logs',
+  metricName,
+  metricType,
 }: UseLabelValuesProps) {
-  const shouldRun = enabled && !!labelName;
-  const { data = [], isLoading } = useQuery<string[], Error>({
-    queryKey: ['log-label-values', labelName, filters],
+  const shouldRun = enabled && !!labelName && (mode !== 'metrics' || !!metricName);
+
+  const { data = [], isLoading, error } = useQuery<string[], Error>({
+    queryKey: [
+      'label-values',
+      mode,
+      labelName,
+      JSON.stringify(filters),
+      metricName,
+    ],
     queryFn: ({ signal }) =>
       fetchTagValues({
+        mode,
         labelName,
         filters,
         useRelativeTime: true,
         signal,
+        metricName,
+        metricType,
       }),
     enabled: shouldRun,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  return { data, isLoading };
+  if (mode === 'metrics' && labelName === '_cardinalhq.name') {
+    return { data: [], isLoading: false, error: undefined };
+  }
+
+  return { data, isLoading, error };
 }

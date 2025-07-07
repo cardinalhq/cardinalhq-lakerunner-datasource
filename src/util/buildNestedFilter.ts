@@ -1,7 +1,7 @@
 import type { Filter } from '../types'; 
 
 export function buildNestedFilter(filters: Filter[]): any {
-    if (!filters || filters.length === 0) return undefined;
+    if (!filters || filters.length === 0) {return undefined;}
   
     const convertOp = (op: string) => {
       switch (op) {

@@ -43,35 +43,56 @@ async function streamJsonCollect(
   });
 }
 
+/**
+ * Fetch tag keys for logs or metrics
+ */
 export async function fetchTagKeys({
+  mode = 'logs',
   useRelativeTime = false,
   startTime,
   endTime,
   filters = [],
   signal,
 }: {
+  mode?: 'logs' | 'metrics';
   useRelativeTime?: boolean;
   startTime?: number;
   endTime?: number;
   filters?: Filter[];
   signal?: AbortSignal;
 }): Promise<string[]> {
+  const dataset = mode;
   const keys = new Set<string>();
-  const url = useRelativeTime
-    ? `${BASE_URL}/api/v1/tags/logs?s=e-1h&e=now`
-    : `${BASE_URL}/api/v1/tags/logs?s=${startTime}&e=${endTime}`;
 
-  const body = useRelativeTime
-    ? undefined
-    : filters.length > 0
-    ? {
-        dataset: 'logs',
-        filter: buildNestedFilter(filters),
-        limit: 1000,
-        order: 'DESC',
-        returnResults: true,
-      }
-    : undefined;
+  const url = useRelativeTime
+    ? `${BASE_URL}/api/v1/tags/${dataset}?s=e-1h&e=now`
+    : `${BASE_URL}/api/v1/tags/${dataset}?s=${startTime}&e=${endTime}`;
+
+  const nestedFilter = buildNestedFilter(filters);
+  const fallbackFilter =
+    mode === 'logs'
+      ? {
+          k: '_cardinalhq.name',
+          v: [''],
+          op: 'has',
+          dataType: 'string',
+          extracted: false,
+          computed: false,
+        }
+      : undefined;
+
+  const filter = nestedFilter ?? fallbackFilter;
+
+  const body =
+    !useRelativeTime && filter
+      ? {
+          dataset,
+          filter,
+          limit: 1000,
+          order: 'DESC',
+          returnResults: true,
+        }
+      : undefined;
 
   await streamJsonCollect(
     url,
@@ -91,12 +112,21 @@ export async function fetchTagKeys({
   return Array.from(keys);
 }
 
+/**
+ * Fetch tag values for logs or metrics
+ */
 export async function fetchTagValues({
+  mode = 'logs',
+  metricName,
+  metricType,
   labelName,
   filters = [],
   useRelativeTime = false,
   signal,
 }: {
+  mode?: 'logs' | 'metrics';
+  metricName?: string;
+  metricType?: string;
   labelName: string;
   filters?: Filter[];
   useRelativeTime?: boolean;
@@ -106,16 +136,40 @@ export async function fetchTagValues({
     throw new Error('labelName is required');
   }
 
+  const dataset = mode;
   const vals = new Set<string>();
-  const url = `${BASE_URL}/api/v1/tags/logs?s=e-1h&e=now&tagName=${encodeURIComponent(
+
+  const url = `${BASE_URL}/api/v1/tags/${dataset}?s=e-1h&e=now&tagName=${encodeURIComponent(
     labelName
   )}&dataType=string`;
 
   const nestedFilter = buildNestedFilter(filters);
 
-  const body = {
-    dataset: 'logs',
-    filter:
+  const metricNameFilter =
+    mode === 'metrics' && metricName
+      ? {
+          k: '_cardinalhq.name',
+          v: [metricName],
+          op: 'eq',
+          dataType: 'string',
+          extracted: false,
+          computed: false,
+        }
+      : undefined;
+
+  let filter;
+
+  if (mode === 'metrics') {
+    if (metricNameFilter && nestedFilter) {
+      filter = {
+        op: 'and',
+        children: [metricNameFilter, nestedFilter],
+      };
+    } else {
+      filter = metricNameFilter ?? nestedFilter;
+    }
+  } else {
+    filter =
       nestedFilter ??
       {
         k: labelName,
@@ -124,11 +178,20 @@ export async function fetchTagValues({
         dataType: 'string',
         extracted: false,
         computed: false,
-      },
+      };
+  }
+
+  const body: Record<string, any> = {
+    dataset,
+    filter,
     limit: 1000,
     order: 'DESC',
     returnResults: true,
   };
+
+  if (mode === 'metrics' && metricType) {
+    body.metricType = metricType;
+  }
 
   await streamJsonCollect(
     url,

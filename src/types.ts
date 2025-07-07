@@ -14,7 +14,11 @@ export interface MyQuery extends DataQuery {
   groupBy?: string[];
   queryText?: string;
   constant?: number;
+  mode?: 'logs' | 'metrics';
+  metricName?: string;
+  metricType?: 'gauge' | 'rate' | 'histogram';
 }
+
 
 export const DEFAULT_QUERY: Partial<MyQuery> = {
   filters: [],
@@ -37,7 +41,6 @@ export interface MySecureJsonData {
   apiKey?: string;
 }
 
-// For advanced use (explore style payloads)
 export interface ExploreQuery {
   id: string;
   dataset: 'logs' | 'metrics' | 'spans';
