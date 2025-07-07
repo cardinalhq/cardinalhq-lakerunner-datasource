@@ -19,6 +19,9 @@ interface FilterRowProps {
   removeFilter: (index: number) => void;
   addFilter: () => void;
   onRunQuery: () => void;
+  mode?: 'logs' | 'metrics';
+  metricName?: string;
+  metricType?: string;
 }
 
 export const FilterRow = ({
@@ -31,25 +34,34 @@ export const FilterRow = ({
   removeFilter,
   addFilter,
   onRunQuery,
+  metricType,
+  mode = 'logs',
+  metricName,
 }: FilterRowProps) => {
+  const isMetricsMode = mode === 'metrics';
+  const isLast = index === filters.length - 1;
+
   const { data: values = [], isLoading: loadingValues } = useLabelValues({
     labelName: filter.tag,
     filters: filters.slice(0, index),
-    enabled: !!filter.tag,
+    enabled: !!filter.tag && (!isMetricsMode || !!metricName),
+    mode,
+    metricName,
+    metricType,
   });
 
-  const isLast = index === filters.length - 1;
+  const tagOptions = loadingLabels
+    ? [{ label: 'Loading...', value: '__loading' }]
+    : labels
+        .filter((l: string) => l !== '_cardinalhq.name') // exclude internal tag
+        .map((l: string) => ({ label: l, value: l }));
 
   return (
     <InlineFieldRow style={{ marginBottom: 4, gap: '4px', alignItems: 'center' }}>
       <InlineField>
         <Combobox
           width={20}
-          options={
-            loadingLabels
-              ? [{ label: 'Loading...', value: '__loading' }]
-              : labels.map((l: any) => ({ label: l, value: l }))
-          }
+          options={tagOptions}
           value={filter.tag}
           onChange={(v) => {
             const selected = v?.value ?? '';
@@ -57,6 +69,7 @@ export const FilterRow = ({
             onRunQuery();
           }}
           placeholder="Select label"
+          disabled={loadingLabels}
           loading={loadingLabels}
         />
       </InlineField>
@@ -112,10 +125,10 @@ export const FilterRow = ({
 
       {isLast && (
         <InlineField>
-          <Button icon="plus" variant="secondary" onClick={addFilter}>
-          </Button>
+          <Button icon="plus" variant="secondary" onClick={addFilter} />
         </InlineField>
       )}
+
     </InlineFieldRow>
   );
 };
