@@ -8,8 +8,10 @@ import {
 } from '@grafana/ui';
 import { Filter, Operator } from '../types';
 import { useLabelValues } from '../hooks/useValues';
+import type { DataSource } from 'datasource';
 
 interface FilterRowProps {
+  datasource: DataSource;
   index: number;
   filter: Filter;
   filters: Filter[];
@@ -25,6 +27,7 @@ interface FilterRowProps {
 }
 
 export const FilterRow = ({
+  datasource,
   index,
   filter,
   filters,
@@ -42,6 +45,7 @@ export const FilterRow = ({
   const isLast = index === filters.length - 1;
 
   const { data: values = [], isLoading: loadingValues } = useLabelValues({
+    datasource,
     labelName: filter.tag,
     filters: filters.slice(0, index),
     enabled: !!filter.tag && (!isMetricsMode || !!metricName),

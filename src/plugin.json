@@ -1,13 +1,17 @@
 {
-  "$schema": "https://raw.githubusercontent.com/grafana/grafana/main/docs/sources/developers/plugins/plugin.schema.json",
   "type": "datasource",
   "name": "Cardinalhq-Datasource",
   "id": "cardinalhq-cardinalhq-datasource",
   "metrics": true,
   "logs": true,
   "streaming": true,
-  "backend": true,
-  "executable": "gpx_cardinalhq_datasource",
+  "backend": false,
+  "jsonData": {
+    "customPath": "",
+    "apiKey": ""
+  },
+  "secureJsonFields": {},
+  "secureJsonData": {},
   "info": {
     "description": "",
     "author": {
@@ -20,11 +24,11 @@
     },
     "links": [],
     "screenshots": [],
-    "version": "%VERSION%",
-    "updated": "%TODAY%"
+    "version": "1.0.0",
+    "updated": "2025-07-18"
   },
   "dependencies": {
-    "grafanaDependency": ">=10.4.0",
+    "grafanaDependency": ">=10.0.0",
     "plugins": []
   }
 }

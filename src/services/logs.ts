@@ -5,9 +5,6 @@ import {
 } from '../util/QueryUtils';
 import { buildNestedFilter } from '../util/buildNestedFilter';
 
-const BASE_URL = 'https://app.cardinalhq.io';
-const API_KEY = 'REDACTED_API_KEY';
-
 async function streamJsonCollect(
   url: string,
   body: any,
@@ -47,6 +44,8 @@ async function streamJsonCollect(
  * Fetch tag keys for logs or metrics
  */
 export async function fetchTagKeys({
+  apiUrl,
+  apiKey,
   mode = 'logs',
   useRelativeTime = false,
   startTime,
@@ -54,6 +53,8 @@ export async function fetchTagKeys({
   filters = [],
   signal,
 }: {
+  apiUrl: string;
+  apiKey: string;
   mode?: 'logs' | 'metrics';
   useRelativeTime?: boolean;
   startTime?: number;
@@ -63,10 +64,9 @@ export async function fetchTagKeys({
 }): Promise<string[]> {
   const dataset = mode;
   const keys = new Set<string>();
-
   const url = useRelativeTime
-    ? `${BASE_URL}/api/v1/tags/${dataset}?s=e-1h&e=now`
-    : `${BASE_URL}/api/v1/tags/${dataset}?s=${startTime}&e=${endTime}`;
+    ? `${apiUrl}/api/v1/tags/${dataset}?s=e-1h&e=now`
+    : `${apiUrl}/api/v1/tags/${dataset}?s=${startTime}&e=${endTime}`;
 
   const nestedFilter = buildNestedFilter(filters);
   const fallbackFilter =
@@ -99,7 +99,7 @@ export async function fetchTagKeys({
     body,
     {
       'Content-Type': 'application/json',
-      'api-key': API_KEY,
+      'api-key': apiKey,
     },
     (msg) => {
       if (msg && typeof msg === 'object') {
@@ -116,6 +116,8 @@ export async function fetchTagKeys({
  * Fetch tag values for logs or metrics
  */
 export async function fetchTagValues({
+  apiUrl,
+  apiKey,
   mode = 'logs',
   metricName,
   metricType,
@@ -124,6 +126,8 @@ export async function fetchTagValues({
   useRelativeTime = false,
   signal,
 }: {
+  apiUrl: string;
+  apiKey: string;
   mode?: 'logs' | 'metrics';
   metricName?: string;
   metricType?: string;
@@ -139,7 +143,7 @@ export async function fetchTagValues({
   const dataset = mode;
   const vals = new Set<string>();
 
-  const url = `${BASE_URL}/api/v1/tags/${dataset}?s=e-1h&e=now&tagName=${encodeURIComponent(
+  const url = `${apiUrl}/api/v1/tags/${dataset}?s=e-1h&e=now&tagName=${encodeURIComponent(
     labelName
   )}&dataType=string`;
 
@@ -198,7 +202,7 @@ export async function fetchTagValues({
     body,
     {
       'Content-Type': 'application/json',
-      'api-key': API_KEY,
+      'api-key': apiKey,
     },
     (msg) => {
       const value = msg?.[labelName];
