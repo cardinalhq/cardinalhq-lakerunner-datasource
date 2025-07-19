@@ -64,7 +64,6 @@ export async function fetchTagKeys({
 }): Promise<string[]> {
   const dataset = mode;
   const keys = new Set<string>();
-console.log(apiUrl, apiKey)
   const url = useRelativeTime
     ? `${apiUrl}/api/v1/tags/${dataset}?s=e-1h&e=now`
     : `${apiUrl}/api/v1/tags/${dataset}?s=${startTime}&e=${endTime}`;

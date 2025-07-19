@@ -7,14 +7,11 @@
   "streaming": true,
   "backend": false,
   "jsonData": {
-    "customPath": ""
-  },
-  "secureJsonData": {
+    "customPath": "",
     "apiKey": ""
   },
-  "secureJsonFields": {
-    "apiKey": true
-  },
+  "secureJsonFields": {},
+  "secureJsonData": {},
   "info": {
     "description": "",
     "author": {

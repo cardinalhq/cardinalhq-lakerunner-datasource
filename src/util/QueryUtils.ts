@@ -1,6 +1,5 @@
 export interface EventSourceOptions extends RequestInit {
   headers?: Record<string, string>;
-  apiKey?: string;
   onmessage: (event: MessageEvent<any>) => void;
   onerror?: (err: any) => void;
   openWhenHidden?: boolean;
@@ -11,7 +10,6 @@ export function apiFetchEventSourceWrapper(
   url: string,
   {
     headers = {},
-    apiKey = '',
     onmessage,
     onerror,
     openWhenHidden = false,
@@ -23,12 +21,15 @@ export function apiFetchEventSourceWrapper(
   const signal = externalSignal ?? controller!.signal;
 
   const fullHeaders: Record<string, string> = {
-    ...headers,
     'Content-Type': 'application/json',
-    'api-key': apiKey,
+    ...headers,
   };
 
-  fetch(url, { ...fetchOptions, headers: fullHeaders, signal })
+  fetch(url, {
+    ...fetchOptions,
+    headers: fullHeaders,
+    signal,
+  })
     .then(async (res) => {
       if (!res.ok || !res.body) {
         throw new Error(`SSE request failed: ${res.status}`);
@@ -54,12 +55,8 @@ export function apiFetchEventSourceWrapper(
       }
     })
     .catch((err) => {
-      if (err.name === 'AbortError') {
-        return;
-      }
-      if (onerror) {
-        onerror(err);
-      }
+      if (err.name === 'AbortError') {return;}
+      if (onerror) {onerror(err);}
     });
 
   if (!openWhenHidden && controller) {

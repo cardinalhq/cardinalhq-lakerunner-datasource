@@ -35,9 +35,6 @@ export interface DataSourceResponse {
 
 export interface MyDataSourceOptions extends DataSourceJsonData {
   customPath?: string;
-}
-
-export interface MySecureJsonData {
   apiKey?: string;
 }
 
