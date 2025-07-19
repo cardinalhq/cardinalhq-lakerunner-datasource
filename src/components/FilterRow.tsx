@@ -70,7 +70,7 @@ export const FilterRow = ({
           onChange={(v) => {
             const selected = v?.value ?? '';
             updateFilter(index, { tag: selected, value: [''] });
-            onRunQuery();
+            // onRunQuery();
           }}
           placeholder="Select label"
           disabled={loadingLabels}
@@ -90,7 +90,7 @@ export const FilterRow = ({
           value={filter.op}
           onChange={(v) => {
             updateFilter(index, { op: v?.value as Operator });
-            onRunQuery();
+            // onRunQuery();
           }}
           placeholder="Op"
           disabled={!filter.tag}
@@ -109,7 +109,7 @@ export const FilterRow = ({
           onChange={(v) => {
             if (v?.value !== '__loading') {
               updateFilter(index, { value: [v?.value ?? ''] });
-              onRunQuery();
+              // onRunQuery();
             }
           }}
           placeholder="Select value"

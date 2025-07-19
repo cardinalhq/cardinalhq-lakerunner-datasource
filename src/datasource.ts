@@ -65,7 +65,13 @@ export class DataSource
     return new Observable<DataQueryResponse>((subscriber) => {
       const run = async () => {
         const target = request.targets[0];
+        
         const isMetrics = target.mode === 'metrics';
+        if (isMetrics && !target.metricName) {
+          subscriber.next({ data: [] }); 
+          subscriber.complete();
+          return;
+        }
         const filters: Filter[] = [...(target.filters ?? [])];
         const groupBy: string[] = target.groupBy ?? [];
 
@@ -223,9 +229,9 @@ export class DataSource
 
                     subscriber.next({ data: frames });
                   }
-                } else {
-                  if (parsed.type !== 'event') {continue;}
-
+                } 
+                  else if (!isMetrics) {
+                    if (parsed.type !== 'event') { continue; }
                   const ts = msg.timestamp;
                   const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
                   const severity = msg.tags?.['_cardinalhq.level'] || '';

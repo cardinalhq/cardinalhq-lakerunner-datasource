@@ -155,7 +155,7 @@ export function QueryEditor({
         ...query,
         filters: [{ tag: defaultTag, op: '=' as Operator, value: [''] }],
       });
-      onRunQuery();
+      // onRunQuery();
     }
   }, [filters, labels, query, onChange, onRunQuery]);
 
@@ -163,7 +163,7 @@ export function QueryEditor({
     const updated = [...filters];
     updated[index] = { ...updated[index], ...patch };
     onChange({ ...query, filters: updated });
-    onRunQuery();
+    // onRunQuery();
   };
 
   const addFilter = () => {
@@ -171,14 +171,14 @@ export function QueryEditor({
     const defaultTag = labels.find(l => l !== '_cardinalhq.name') ?? '';
     const updated = [...filters, { tag: defaultTag, op: '=' as Operator, value: [''] }];
     onChange({ ...query, filters: updated });
-    onRunQuery();
+    // onRunQuery();
   };
 
   const removeFilter = (index: number) => {
     const updated = [...filters];
     updated.splice(index, 1);
     onChange({ ...query, filters: updated });
-    onRunQuery();
+    // onRunQuery();
   };
 
   const metricOptions = metrics_metadata.map((m) => ({
@@ -197,21 +197,22 @@ export function QueryEditor({
     <div>
       <TabsBar>
         {['logs', 'metrics'].map((mode) => (
-          <Tab
-            key={mode}
-            label={mode.charAt(0).toUpperCase() + mode.slice(1)}
-            active={query.mode === mode}
-            onChangeTab={() => {
-              onChange({
-                ...query,
-                mode: mode as 'logs' | 'metrics',
-                filters: [],
-                metricName: undefined,
-                metricType: undefined,
-              });
-              onRunQuery();
-            }}
-          />
+         <Tab
+         key={mode}
+         label={mode.charAt(0).toUpperCase() + mode.slice(1)}
+         active={query.mode === mode}
+         onChangeTab={() => {
+           onChange({
+             ...query,
+             mode: mode as 'logs' | 'metrics',
+             filters: [],
+             groupBy: [],
+             metricName: undefined,
+             metricType: undefined,
+           });
+           onRunQuery();
+         }}
+       />
         ))}
       </TabsBar>
 
@@ -230,7 +231,7 @@ export function QueryEditor({
                     metricType: selected.metricType as 'rate' | 'gauge' | 'histogram',
                     filters: [],
                   });
-                  onRunQuery();
+                  // onRunQuery();
                 }
               }}
               width={40}
@@ -267,7 +268,7 @@ export function QueryEditor({
             onChange={(v) => {
               const selected = v.map((item) => item.value).filter((val): val is string => Boolean(val));
               onChange({ ...query, groupBy: selected });
-              onRunQuery();
+              // onRunQuery();
             }}
             width={40}
           />
