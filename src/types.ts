@@ -34,7 +34,7 @@ export interface DataSourceResponse {
 }
 
 export interface MyDataSourceOptions extends DataSourceJsonData {
-  path?: string;
+  customPath?: string;
 }
 
 export interface MySecureJsonData {

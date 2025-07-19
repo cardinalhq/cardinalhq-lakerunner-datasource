@@ -14,7 +14,7 @@ export function ConfigEditor(props: Props) {
       ...options,
       jsonData: {
         ...jsonData,
-        path: event.target.value,
+        customPath: event.target.value,
       },
     });
   };
@@ -23,6 +23,7 @@ export function ConfigEditor(props: Props) {
     onOptionsChange({
       ...options,
       secureJsonData: {
+        ...secureJsonData,
         apiKey: event.target.value,
       },
     });
@@ -36,9 +37,9 @@ export function ConfigEditor(props: Props) {
         apiKey: false,
       },
       secureJsonData: {
-        ...options.secureJsonData,
+        ...secureJsonData,
         apiKey: '',
-      },
+      }
     });
   };
 
@@ -48,7 +49,7 @@ export function ConfigEditor(props: Props) {
         <Input
           id="config-editor-path"
           onChange={onPathChange}
-          value={jsonData.path}
+          value={jsonData.customPath}
           placeholder="Enter the path, e.g. /api/v1"
           width={40}
         />
@@ -57,7 +58,7 @@ export function ConfigEditor(props: Props) {
         <SecretInput
           required
           id="config-editor-api-key"
-          isConfigured={secureJsonFields.apiKey}
+          isConfigured={secureJsonFields?.apiKey}
           value={secureJsonData?.apiKey}
           placeholder="Enter your API key"
           width={40}

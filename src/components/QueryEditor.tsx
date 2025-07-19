@@ -129,6 +129,7 @@ export function QueryEditor({
   query,
   onChange,
   onRunQuery,
+  datasource,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
   const isMetricsMode = query.mode === 'metrics';
 
@@ -141,8 +142,9 @@ export function QueryEditor({
   }, [query.filters]);
 
   const { data: labels = [], isLoading: loadingLabels } = useLogLabels({
-    enabled: query.mode !== 'metrics' || !!query.metricName,
+    datasource,
     filters,
+    enabled: true,
     mode: query.mode,
   });
 
@@ -239,6 +241,7 @@ export function QueryEditor({
 
       {filters.map((filter, index) => (
         <FilterRow
+          datasource={datasource}
           key={index}
           index={index}
           filter={filter}

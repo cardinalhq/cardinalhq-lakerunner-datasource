@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchTagValues } from 'services/logs';
 import type { Filter } from '../types';
+import type { DataSource } from '../datasource';
 
 interface UseLabelValuesProps {
+  datasource: DataSource;
   labelName: string;
   enabled: boolean;
   filters?: Filter[];
@@ -10,7 +12,9 @@ interface UseLabelValuesProps {
   metricName?: string;
   metricType?: string;
 }
+
 export function useLabelValues({
+  datasource,
   labelName,
   enabled,
   filters = [],
@@ -18,18 +22,21 @@ export function useLabelValues({
   metricName,
   metricType,
 }: UseLabelValuesProps) {
-  const shouldRun = enabled && !!labelName && (mode !== 'metrics' || !!metricName);
+  const isInternalMetricLabel = mode === 'metrics' && labelName === '_cardinalhq.name';
+  const shouldRun = enabled && !!labelName && !isInternalMetricLabel && (mode !== 'metrics' || !!metricName);
 
   const { data = [], isLoading, error } = useQuery<string[], Error>({
     queryKey: [
       'label-values',
       mode,
       labelName,
-      JSON.stringify(filters),
       metricName,
+      filters.map((f) => `${f.tag}:${f.op}:${f.value.join(',')}`).join('|'),
     ],
     queryFn: ({ signal }) =>
       fetchTagValues({
+        apiUrl: datasource.getApiUrl(),
+        apiKey: datasource.getApiKey(), 
         mode,
         labelName,
         filters,
@@ -42,10 +49,6 @@ export function useLabelValues({
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
-
-  if (mode === 'metrics' && labelName === '_cardinalhq.name') {
-    return { data: [], isLoading: false, error: undefined };
-  }
 
   return { data, isLoading, error };
 }

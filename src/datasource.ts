@@ -11,17 +11,18 @@ import {
   toDataFrame,
 } from '@grafana/data';
 import { Observable } from 'rxjs';
-import { MyQuery, MyDataSourceOptions, Filter } from './types';
+import { MyQuery, MyDataSourceOptions, Filter, MySecureJsonData } from './types';
 import { buildNestedFilter } from './util/buildNestedFilter';
 
 export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> implements DataSourceWithSupplementaryQueriesSupport<MyQuery> {
   private apiKey: string;
   private apiUrl: string;
 
-  constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
+  constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions> & { secureJsonData?: MySecureJsonData }) {
     super(instanceSettings);
-    this.apiKey = 'REDACTED_API_KEY';
-    this.apiUrl = 'https://app.cardinalhq.io';
+  
+    this.apiKey = instanceSettings?.secureJsonData?.apiKey || '';
+    this.apiUrl = instanceSettings.jsonData?.customPath || 'https://app.cardinalhq.io';
   }
 
   getSupportedSupplementaryQueryTypes(): SupplementaryQueryType[] {
@@ -294,6 +295,14 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> impl
 
       run();
     });
+  }
+
+  getApiKey(): string {
+    return this.apiKey;
+  }
+  
+  getApiUrl(): string {
+    return this.apiUrl;
   }
 
   async testDatasource() {
