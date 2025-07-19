@@ -9,9 +9,12 @@
   "jsonData": {
     "customPath": ""
   },
- "secureJsonFields": {
-  "apiKey": true
-},
+  "secureJsonData": {
+    "apiKey": ""
+  },
+  "secureJsonFields": {
+    "apiKey": true
+  },
   "info": {
     "description": "",
     "author": {
