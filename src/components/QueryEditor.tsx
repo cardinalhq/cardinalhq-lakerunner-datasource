@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   MultiSelect,
   InlineFieldRow,
@@ -124,7 +124,6 @@ const metrics_metadata = [
   { metricName: "system.cpu.utilization", metricType: "gauge" }
 ];
 
-
 export function QueryEditor({
   query,
   onChange,
@@ -135,10 +134,7 @@ export function QueryEditor({
 
   const filters: Filter[] = useMemo(() => {
     const existing = query.filters?.filter(f => f.tag !== '_cardinalhq.name') ?? [];
-    if (!existing.length) {
-      return [{ tag: '', op: '=' as Operator, value: [''] }];
-    }
-    return existing;
+    return existing.length > 0 ? existing : [{ tag: '', op: '=' as Operator, value: [''] }];
   }, [query.filters]);
 
   const { data: labels = [], isLoading: loadingLabels } = useLogLabels({
@@ -148,37 +144,22 @@ export function QueryEditor({
     mode: query.mode,
   });
 
-  useEffect(() => {
-    if (filters.length === 0 && labels.length > 0 && query.mode !== 'metrics') {
-      const defaultTag = labels[0];
-      onChange({
-        ...query,
-        filters: [{ tag: defaultTag, op: '=' as Operator, value: [''] }],
-      });
-      onRunQuery();
-    }
-  }, [filters, labels, query, onChange, onRunQuery]);
-
   const updateFilter = (index: number, patch: Partial<Filter>) => {
     const updated = [...filters];
     updated[index] = { ...updated[index], ...patch };
     onChange({ ...query, filters: updated });
-    // onRunQuery();
   };
 
   const addFilter = () => {
-    if (isMetricsMode) { return; }
     const defaultTag = labels.find(l => l !== '_cardinalhq.name') ?? '';
     const updated = [...filters, { tag: defaultTag, op: '=' as Operator, value: [''] }];
     onChange({ ...query, filters: updated });
-    // onRunQuery();
   };
 
   const removeFilter = (index: number) => {
     const updated = [...filters];
     updated.splice(index, 1);
     onChange({ ...query, filters: updated });
-    // onRunQuery();
   };
 
   const metricOptions = metrics_metadata.map((m) => ({
@@ -192,27 +173,26 @@ export function QueryEditor({
   }));
   const selectedValue = query.metricName ?? '';
 
-
   return (
     <div>
       <TabsBar>
         {['logs', 'metrics'].map((mode) => (
-         <Tab
-         key={mode}
-         label={mode.charAt(0).toUpperCase() + mode.slice(1)}
-         active={query.mode === mode}
-         onChangeTab={() => {
-           onChange({
-             ...query,
-             mode: mode as 'logs' | 'metrics',
-             filters: [],
-             groupBy: [],
-             metricName: undefined,
-             metricType: undefined,
-           });
-          onRunQuery();
-         }}
-       />
+          <Tab
+            key={mode}
+            label={mode.charAt(0).toUpperCase() + mode.slice(1)}
+            active={query.mode === mode}
+            onChangeTab={() => {
+              onChange({
+                ...query,
+                mode: mode as 'logs' | 'metrics',
+                filters: [{ tag: '', op: '=' as Operator, value: [''] }],
+                groupBy: [],
+                metricName: undefined,
+                metricType: undefined,
+              });
+              onRunQuery(); // clears the panel
+            }}
+          />
         ))}
       </TabsBar>
 
@@ -229,9 +209,7 @@ export function QueryEditor({
                     ...query,
                     metricName: selected.value,
                     metricType: selected.metricType as 'rate' | 'gauge' | 'histogram',
-                    filters: [],
                   });
-                  //onRunQuery();
                 }
               }}
               width={40}
@@ -268,7 +246,6 @@ export function QueryEditor({
             onChange={(v) => {
               const selected = v.map((item) => item.value).filter((val): val is string => Boolean(val));
               onChange({ ...query, groupBy: selected });
-              //onRunQuery();
             }}
             width={40}
           />
