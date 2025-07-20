@@ -155,7 +155,7 @@ export function QueryEditor({
         ...query,
         filters: [{ tag: defaultTag, op: '=' as Operator, value: [''] }],
       });
-      // onRunQuery();
+      onRunQuery();
     }
   }, [filters, labels, query, onChange, onRunQuery]);
 
@@ -210,7 +210,7 @@ export function QueryEditor({
              metricName: undefined,
              metricType: undefined,
            });
-           onRunQuery();
+          onRunQuery();
          }}
        />
         ))}
@@ -231,7 +231,7 @@ export function QueryEditor({
                     metricType: selected.metricType as 'rate' | 'gauge' | 'histogram',
                     filters: [],
                   });
-                  // onRunQuery();
+                  //onRunQuery();
                 }
               }}
               width={40}
@@ -268,7 +268,7 @@ export function QueryEditor({
             onChange={(v) => {
               const selected = v.map((item) => item.value).filter((val): val is string => Boolean(val));
               onChange({ ...query, groupBy: selected });
-              // onRunQuery();
+              //onRunQuery();
             }}
             width={40}
           />
