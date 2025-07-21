@@ -11,6 +11,8 @@ interface UseLabelValuesProps {
   mode?: 'logs' | 'metrics';
   metricName?: string;
   metricType?: string;
+  startTime?: number;
+  endTime?: number;
 }
 
 export function useLabelValues({
@@ -21,6 +23,8 @@ export function useLabelValues({
   mode = 'logs',
   metricName,
   metricType,
+  startTime,
+  endTime
 }: UseLabelValuesProps) {
   const isInternalMetricLabel = mode === 'metrics' && labelName === '_cardinalhq.name';
   const shouldRun = enabled && !!labelName && !isInternalMetricLabel && (mode !== 'metrics' || !!metricName);
@@ -44,6 +48,8 @@ export function useLabelValues({
         signal,
         metricName,
         metricType,
+        startTime,
+        endTime
       }),
     enabled: shouldRun,
     staleTime: 5 * 60 * 1000,

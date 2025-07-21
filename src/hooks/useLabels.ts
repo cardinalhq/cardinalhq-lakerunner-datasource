@@ -8,16 +8,28 @@ interface UseLabelsProps {
   enabled: boolean;
   filters?: Filter[];
   mode?: 'logs' | 'metrics';
+  startTime?: number;
+  endTime?: number;
 }
 
 export function useLogLabels({ 
   datasource,
   enabled, 
   filters = [], 
-  mode = 'logs' 
+  mode = 'logs',
+  startTime = Date.now() - 3600_000,  
+  endTime   = Date.now(),
 }: UseLabelsProps) {
+  const queryKey = [
+    'labels',
+    mode,
+    String(startTime),
+    String(endTime),
+    JSON.stringify(filters),
+  ] as const;
+
   const { data = [], isLoading } = useQuery<string[], Error>({
-    queryKey: ['labels', mode, 'e-1h-to-now', filters],
+    queryKey,
     queryFn: ({ signal }) =>
       fetchTagKeys({ 
         apiUrl: datasource.getApiUrl(),
@@ -25,9 +37,12 @@ export function useLogLabels({
         useRelativeTime: true, 
         filters, 
         signal, 
-        mode }),
+        mode,
+        startTime,
+        endTime 
+      }),
     enabled,
-    staleTime: Infinity,
+    staleTime: 0,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

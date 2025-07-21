@@ -129,19 +129,26 @@ export function QueryEditor({
   onChange,
   onRunQuery,
   datasource,
+  range,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
   const isMetricsMode = query.mode === 'metrics';
 
   const filters: Filter[] = useMemo(() => {
-    const existing = query.filters?.filter(f => f.tag !== '_cardinalhq.name') ?? [];
-    return existing.length > 0 ? existing : [{ tag: '', op: '=' as Operator, value: [''] }];
+    const remaining = query.filters?.filter((f) => f.tag !== '_cardinalhq.name') ?? [];
+    return remaining.length > 0
+      ? remaining
+      : [{ tag: '', op: '=' as Operator, value: [''] }];
   }, [query.filters]);
-
+  const startTime = query.timeFrom ?? range?.from.valueOf();
+  const endTime   = query.timeTo   ?? range?.to.valueOf();
+  
   const { data: labels = [], isLoading: loadingLabels } = useLogLabels({
     datasource,
     filters,
-    enabled: true,
+    enabled: !isMetricsMode,
     mode: query.mode,
+    startTime,
+    endTime,
   });
 
   const updateFilter = (index: number, patch: Partial<Filter>) => {

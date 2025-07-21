@@ -17,8 +17,9 @@ export interface MyQuery extends DataQuery {
   mode?: 'logs' | 'metrics';
   metricName?: string;
   metricType?: 'gauge' | 'rate' | 'histogram';
+  timeFrom?: number;
+  timeTo?: number;
 }
-
 
 export const DEFAULT_QUERY: Partial<MyQuery> = {
   filters: [],
@@ -33,8 +34,14 @@ export interface DataSourceResponse {
   datapoints: Array<[number, number]>;
 }
 
+// ← PUBLIC settings, no apiKey here anymore
 export interface MyDataSourceOptions extends DataSourceJsonData {
   customPath?: string;
+  apiKey?: string;
+}
+
+// ← SECURE settings, stored encrypted
+export interface MySecureJsonData {
   apiKey?: string;
 }
 

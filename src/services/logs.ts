@@ -40,9 +40,6 @@ async function streamJsonCollect(
   });
 }
 
-/**
- * Fetch tag keys for logs or metrics
- */
 export async function fetchTagKeys({
   apiUrl,
   apiKey,
@@ -64,9 +61,7 @@ export async function fetchTagKeys({
 }): Promise<string[]> {
   const dataset = mode;
   const keys = new Set<string>();
-  const url = useRelativeTime
-    ? `${apiUrl}/api/v1/tags/${dataset}?s=e-1h&e=now`
-    : `${apiUrl}/api/v1/tags/${dataset}?s=${startTime}&e=${endTime}`;
+  const url = `${apiUrl}/api/v1/tags/${dataset}?s=${startTime}&e=${endTime}`;
 
   const nestedFilter = buildNestedFilter(filters);
   const fallbackFilter =
@@ -112,9 +107,6 @@ export async function fetchTagKeys({
   return Array.from(keys);
 }
 
-/**
- * Fetch tag values for logs or metrics
- */
 export async function fetchTagValues({
   apiUrl,
   apiKey,
@@ -123,8 +115,9 @@ export async function fetchTagValues({
   metricType,
   labelName,
   filters = [],
-  useRelativeTime = false,
   signal,
+  startTime,
+  endTime,
 }: {
   apiUrl: string;
   apiKey: string;
@@ -135,6 +128,8 @@ export async function fetchTagValues({
   filters?: Filter[];
   useRelativeTime?: boolean;
   signal?: AbortSignal;
+  startTime?: number;
+  endTime?: number;
 }): Promise<string[]> {
   if (!labelName) {
     throw new Error('labelName is required');
@@ -143,7 +138,7 @@ export async function fetchTagValues({
   const dataset = mode;
   const vals = new Set<string>();
 
-  const url = `${apiUrl}/api/v1/tags/${dataset}?s=e-1h&e=now&tagName=${encodeURIComponent(
+  const url = `${apiUrl}/api/v1/tags/${dataset}?s=${startTime}&e=${endTime}&tagName=${encodeURIComponent(
     labelName
   )}&dataType=string`;
 
