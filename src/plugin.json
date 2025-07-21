@@ -1,7 +1,7 @@
 {
   "type": "datasource",
-  "name": "Cardinalhq-Datasource",
-  "id": "cardinalhq-cardinalhq-datasource",
+  "name": "Cardinal LakeRunner",
+  "id": "cardinalhq-lakerunner-datasource",
   "metrics": true,
   "logs": true,
   "streaming": true,
@@ -13,11 +13,11 @@
   "secureJsonFields": {},
   "secureJsonData": {},
   "info": {
-    "description": "",
+    "description": "Explore and visualize logs and metrics stored in your own open-source private datalake",
     "author": {
-      "name": "Cardinalhq"
+      "name": "Cardinal HQ"
     },
-    "keywords": ["datasource"],
+    "keywords": ["datasource", "cardinal", "lakerunner", "logs", "metrics"],
     "logos": {
       "small": "img/logo.svg",
       "large": "img/logo.svg"
@@ -25,7 +25,7 @@
     "links": [],
     "screenshots": [],
     "version": "1.0.0",
-    "updated": "2025-07-18"
+    "updated": "2025-07-21"
   },
   "dependencies": {
     "grafanaDependency": ">=10.0.0",
