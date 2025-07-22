@@ -5,7 +5,8 @@
   "metrics": true,
   "logs": true,
   "streaming": true,
-  "backend": false,
+  "backend": true,
+  "executable": "gpx_cardinalhq_datasource",
   "jsonData": {
     "customPath": "",
     "apiKey": ""
@@ -24,8 +25,8 @@
     },
     "links": [],
     "screenshots": [],
-    "version": "1.0.0",
-    "updated": "2025-07-21"
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
   },
   "dependencies": {
     "grafanaDependency": ">=10.0.0",
