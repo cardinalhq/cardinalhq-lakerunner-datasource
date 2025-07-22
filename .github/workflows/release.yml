@@ -23,6 +23,6 @@ jobs:
 
       - uses: grafana/plugin-actions/build-plugin@main # zizmor: ignore[unpinned-uses] provided by grafana
         with:
-          policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
-          attestation: true
+          # policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          # attestation: true
           use_changelog_generator: true
