@@ -1,6 +1,6 @@
 {
-  "name": "cardinalhq-datasource",
-  "version": "1.0.0",
+  "name": "cardinalhq-lakerunner-datasource",
+  "version": "0.1.0",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
     "dev": "webpack -w -c ./.config/webpack/webpack.config.ts --env development",
@@ -13,7 +13,7 @@
     "server": "docker compose up --build",
     "sign": "npx --yes @grafana/sign-plugin@latest"
   },
-  "author": "Cardinalhq",
+  "author": "Cardinal HQ",
   "license": "Apache-2.0",
   "devDependencies": {
     "@grafana/eslint-config": "^8.0.0",
