@@ -7,16 +7,12 @@
   "streaming": true,
   "backend": true,
   "executable": "gpx_cardinalhq_datasource",
-  "jsonData": {
-    "customPath": "",
-    "apiKey": ""
-  },
-  "secureJsonFields": {},
-  "secureJsonData": {},
   "info": {
     "description": "Explore and visualize logs and metrics stored in your own open-source private datalake",
     "author": {
-      "name": "Cardinal HQ"
+      "name": "Cardinal HQ",
+      "email": "support@cardinalhq.io",
+      "url": "https://cardinalhq.io"
     },
     "keywords": ["datasource", "cardinal", "lakerunner", "logs", "metrics"],
     "logos": {
