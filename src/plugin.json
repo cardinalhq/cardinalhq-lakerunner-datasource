@@ -6,7 +6,7 @@
   "logs": true,
   "streaming": true,
   "backend": true,
-  "executable": "gpx-cardinalhq-backend",
+  "executable": "gpx_cardinalhq_datasource",
   "jsonData": {
     "customPath": "",
     "apiKey": ""
