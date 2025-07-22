@@ -1,7 +1,7 @@
 services:
   grafana:
     user: root
-    container_name: 'cardinalhq-cardinalhq-datasource'
+    container_name: 'cardinalhq-lakerunner-datasource'
 
     build:
       context: .
@@ -19,13 +19,13 @@ services:
     cap_add:
       - SYS_PTRACE
     volumes:
-      - ../dist:/var/lib/grafana/plugins/cardinalhq-cardinalhq-datasource
+      - ../dist:/var/lib/grafana/plugins/cardinalhq-lakerunner-datasource
       - ../provisioning:/etc/grafana/provisioning
-      - ..:/root/cardinalhq-cardinalhq-datasource
+      - ..:/root/cardinalhq-lakerunner-datasource
 
     environment:
       NODE_ENV: development
-      GF_LOG_FILTERS: plugin.cardinalhq-cardinalhq-datasource:debug
+      GF_LOG_FILTERS: plugin.cardinalhq-lakerunner-datasource:debug
       GF_LOG_LEVEL: debug
       GF_DATAPROXY_LOGGING: 1
-      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: cardinalhq-cardinalhq-datasource
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: cardinalhq-lakerunner-datasource
