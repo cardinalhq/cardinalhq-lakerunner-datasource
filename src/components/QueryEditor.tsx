@@ -101,8 +101,7 @@ export function QueryEditor({
   };
 
   const addFilter = () => {
-    const defaultTag = labels.find((l) => l !== '_cardinalhq.name') ?? '';
-    const updated = [...filters, { tag: defaultTag, op: '=' as Operator, value: [''] }];
+    const updated = [...filters, { tag: '', op: '=' as Operator, value: [''] }];
     onChange({ ...query, filters: updated });
   };
 
