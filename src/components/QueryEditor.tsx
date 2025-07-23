@@ -1,116 +1,11 @@
 import { QueryEditorProps } from '@grafana/data';
 import { Combobox, InlineField, InlineFieldRow, MultiSelect, Tab, TabsBar } from '@grafana/ui';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { DataSource } from '../datasource';
 import { useLogLabels } from '../hooks/useLabels';
 import { Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
 import { FilterRow } from './FilterRow';
-
-const metrics_metadata = [
-  { metricName: 'system.cpu.time', metricType: 'rate' },
-  { metricName: 'process.runtime.cpython.cpu.utilization', metricType: 'gauge' },
-  { metricName: 'http.client.duration', metricType: 'histogram' },
-  { metricName: 'process.thread.count', metricType: 'rate' },
-  { metricName: 'process.context_switches', metricType: 'rate' },
-  { metricName: 'jvm.thread.count', metricType: 'rate' },
-  { metricName: 'k8s.pod.network.errors', metricType: 'rate' },
-  { metricName: 'jvm.class.unloaded', metricType: 'rate' },
-  { metricName: 'process.memory.virtual', metricType: 'rate' },
-  { metricName: 'api-gateway.movie_play_starts', metricType: 'rate' },
-  { metricName: 'process.runtime.cpython.context_switches', metricType: 'rate' },
-  { metricName: 'container.memory.usage', metricType: 'gauge' },
-  { metricName: 'system.memory.usage', metricType: 'gauge' },
-  { metricName: 'system.disk.time', metricType: 'rate' },
-  { metricName: 'container.uptime', metricType: 'rate' },
-  { metricName: 'k8s.volume.inodes.used', metricType: 'gauge' },
-  { metricName: 'container.cpu.time', metricType: 'rate' },
-  { metricName: 'jvm.memory.used', metricType: 'rate' },
-  { metricName: 'paymentservice.payment_processing_failures', metricType: 'rate' },
-  { metricName: 'otlp.exporter.seen', metricType: 'rate' },
-  { metricName: 'system.disk.io', metricType: 'rate' },
-  { metricName: 'jvm.memory.used_after_last_gc', metricType: 'rate' },
-  { metricName: 'jvm.gc.duration', metricType: 'histogram' },
-  { metricName: 'k8s.container.cpu_request_utilization', metricType: 'gauge' },
-  { metricName: 'k8s.volume.available', metricType: 'gauge' },
-  { metricName: 'k8s.volume.capacity', metricType: 'gauge' },
-  { metricName: 'container.memory.rss', metricType: 'gauge' },
-  { metricName: 'k8s.pod.filesystem.available', metricType: 'gauge' },
-  { metricName: 'jvm.cpu.count', metricType: 'rate' },
-  { metricName: 'k8s.node.cpu.time', metricType: 'rate' },
-  { metricName: 'k8s.pod.cpu.time', metricType: 'rate' },
-  { metricName: 'k8s.container.cpu_limit_utilization', metricType: 'gauge' },
-  { metricName: 'k8s.node.network.errors', metricType: 'rate' },
-  { metricName: 'container.memory.available', metricType: 'gauge' },
-  { metricName: 'processedLogs', metricType: 'rate' },
-  { metricName: 'k8s.node.memory.usage', metricType: 'gauge' },
-  { metricName: 'jvm.class.loaded', metricType: 'rate' },
-  { metricName: 'system.network.dropped_packets', metricType: 'rate' },
-  { metricName: 'k8s.node.filesystem.capacity', metricType: 'gauge' },
-  { metricName: 'k8s.pod.memory.available', metricType: 'gauge' },
-  { metricName: 'k8s.pod.filesystem.usage', metricType: 'gauge' },
-  { metricName: 'system.network.io', metricType: 'rate' },
-  { metricName: 'process.runtime.cpython.thread_count', metricType: 'rate' },
-  { metricName: 'jvm.memory.committed', metricType: 'rate' },
-  { metricName: 'system.memory.utilization', metricType: 'gauge' },
-  { metricName: 'system.thread_count', metricType: 'gauge' },
-  { metricName: 'container.filesystem.available', metricType: 'gauge' },
-  { metricName: 'k8s.pod.network.io', metricType: 'rate' },
-  { metricName: 'k8s.node.memory.rss', metricType: 'gauge' },
-  { metricName: 'process.cpu.utilization', metricType: 'gauge' },
-  { metricName: 'k8s.pod.memory.major_page_faults', metricType: 'gauge' },
-  { metricName: 'system.swap.usage', metricType: 'gauge' },
-  { metricName: 'processedSpans', metricType: 'rate' },
-  { metricName: 'k8s.volume.inodes.free', metricType: 'gauge' },
-  { metricName: 'http.server.duration', metricType: 'histogram' },
-  { metricName: 'k8s.pod.uptime', metricType: 'rate' },
-  { metricName: 'k8s.node.cpu.usage', metricType: 'gauge' },
-  { metricName: 'system.network.packets', metricType: 'rate' },
-  { metricName: 'k8s.node.memory.working_set', metricType: 'gauge' },
-  { metricName: 'system.network.errors', metricType: 'rate' },
-  { metricName: 'k8s.node.filesystem.available', metricType: 'gauge' },
-  { metricName: 'system.network.connections', metricType: 'rate' },
-  { metricName: 'container.cpu.usage', metricType: 'gauge' },
-  { metricName: 'process.memory.usage', metricType: 'rate' },
-  { metricName: 'process.open_file_descriptor.count', metricType: 'rate' },
-  { metricName: 'api-gateway.movie_play_errors', metricType: 'rate' },
-  { metricName: 'k8s.pod.memory.usage', metricType: 'gauge' },
-  { metricName: 'container.filesystem.usage', metricType: 'gauge' },
-  { metricName: 'process.runtime.cpython.cpu_time', metricType: 'rate' },
-  { metricName: 'http.server.active_requests', metricType: 'rate' },
-  { metricName: 'k8s.node.memory.available', metricType: 'gauge' },
-  { metricName: 'container.memory.working_set', metricType: 'gauge' },
-  { metricName: 'k8s.pod.cpu.usage', metricType: 'gauge' },
-  { metricName: 'container.filesystem.capacity', metricType: 'gauge' },
-  { metricName: 'license-service.license_validations', metricType: 'rate' },
-  { metricName: 'k8s.volume.inodes', metricType: 'gauge' },
-  { metricName: 'jvm.memory.limit', metricType: 'rate' },
-  { metricName: 'http.client.request.duration', metricType: 'histogram' },
-  { metricName: 'k8s.pod.memory.working_set', metricType: 'gauge' },
-  { metricName: 'jvm.class.count', metricType: 'rate' },
-  { metricName: 'k8s.pod.memory.page_faults', metricType: 'gauge' },
-  { metricName: 'k8s.pod.filesystem.capacity', metricType: 'gauge' },
-  { metricName: 'k8s.node.memory.page_faults', metricType: 'gauge' },
-  { metricName: 'queueSize', metricType: 'gauge' },
-  { metricName: 'process.cpu.time', metricType: 'rate' },
-  { metricName: 'checkoutservice.checkout_requests', metricType: 'rate' },
-  { metricName: 'k8s.node.network.io', metricType: 'rate' },
-  { metricName: 'k8s.node.filesystem.usage', metricType: 'gauge' },
-  { metricName: 'container.memory.page_faults', metricType: 'gauge' },
-  { metricName: 'process.runtime.cpython.memory', metricType: 'rate' },
-  { metricName: 'http.server.request.duration', metricType: 'histogram' },
-  { metricName: 'system.disk.operations', metricType: 'rate' },
-  { metricName: 'jvm.cpu.time', metricType: 'rate' },
-  { metricName: 'container.memory.major_page_faults', metricType: 'gauge' },
-  { metricName: 'jvm.cpu.recent_utilization', metricType: 'gauge' },
-  { metricName: 'system.swap.utilization', metricType: 'gauge' },
-  { metricName: 'k8s.node.memory.major_page_faults', metricType: 'gauge' },
-  { metricName: 'k8s.container.memory_limit_utilization', metricType: 'gauge' },
-  { metricName: 'otlp.exporter.exported', metricType: 'rate' },
-  { metricName: 'k8s.container.memory_request_utilization', metricType: 'gauge' },
-  { metricName: 'k8s.pod.memory.rss', metricType: 'gauge' },
-  { metricName: 'process.runtime.cpython.gc_count', metricType: 'rate' },
-  { metricName: 'system.cpu.utilization', metricType: 'gauge' },
-];
+import { fetchMetricNames } from '../services/logs';
 
 export function QueryEditor({
   query,
@@ -159,6 +54,37 @@ export function QueryEditor({
     endTime: timeRange.endTime,
   });
 
+  const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: 'gauge' }>>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadMetrics = async () => {
+      try {
+        const metrics = await fetchMetricNames({
+          datasourceId: datasource.id,
+          startTime,
+          endTime,
+          signal: controller.signal,
+        });
+        setMetricOptions(metrics);
+      } catch {}
+    };
+
+    if (isMetricsMode) {
+      loadMetrics();
+    }
+
+    return () => controller.abort();
+  }, [datasource.id, isMetricsMode, startTime, endTime]);
+
+  const comboboxOptions = metricOptions.map((m) => ({
+    label: m.metricName,
+    value: m.metricName,
+  }));
+
+  const selectedValue = query.metricName ?? '';
+
   const updateFilter = (index: number, patch: Partial<Filter>) => {
     const updated = [...filters];
     updated[index] = { ...updated[index], ...patch };
@@ -176,17 +102,6 @@ export function QueryEditor({
     updated.splice(index, 1);
     onChange({ ...query, filters: updated });
   };
-
-  const metricOptions = metrics_metadata.map((m) => ({
-    label: m.metricName,
-    value: m.metricName,
-    metricType: m.metricType,
-  }));
-  const comboboxOptions = metricOptions.map((m) => ({
-    label: m.label,
-    value: m.value ?? '',
-  }));
-  const selectedValue = query.metricName ?? '';
 
   return (
     <div>
@@ -218,12 +133,12 @@ export function QueryEditor({
               options={comboboxOptions}
               value={selectedValue}
               onChange={(v) => {
-                const selected = metricOptions.find((opt) => opt.value === v?.value);
+                const selected = metricOptions.find((opt) => opt.metricName === v?.value);
                 if (selected) {
                   onChange({
                     ...query,
-                    metricName: selected.value,
-                    metricType: selected.metricType as 'rate' | 'gauge' | 'histogram',
+                    metricName: selected.metricName,
+                    metricType: selected.metricType,
                   });
                 }
               }}

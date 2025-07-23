@@ -146,23 +146,46 @@ export async function fetchTagValues({
   let filter;
 
   if (mode === 'metrics') {
-    if (metricNameFilter && nestedFilter) {
+    const filterEntries: Record<string, any> = {};
+    let i = 1;
+
+    if (metricNameFilter) {
+      filterEntries[`q${i++}`] = metricNameFilter;
+    }
+    if (nestedFilter) {
+      filterEntries[`q${i++}`] = nestedFilter;
+    }
+
+    if (Object.keys(filterEntries).length > 1) {
       filter = {
+        ...filterEntries,
         op: 'and',
-        children: [metricNameFilter, nestedFilter],
       };
     } else {
-      filter = metricNameFilter ?? nestedFilter;
+      filter = Object.values(filterEntries)[0];
+    }
+
+    if (!filter) {
+      filter = {
+        k: '_cardinalhq.name',
+        v: [''],
+        op: 'has',
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      };
     }
   } else {
-    filter = nestedFilter ?? {
-      k: labelName,
-      v: [''],
-      op: 'has',
-      dataType: 'string',
-      extracted: false,
-      computed: false,
-    };
+    filter =
+      nestedFilter ??
+      ({
+        k: labelName,
+        v: [''],
+        op: 'has',
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      } as const);
   }
 
   const body: Record<string, any> = {
@@ -191,4 +214,38 @@ export async function fetchTagValues({
   );
 
   return Array.from(vals);
+}
+
+export async function fetchMetricNames({
+  datasourceId,
+  startTime,
+  endTime,
+  signal,
+}: {
+  datasourceId: number;
+  startTime?: number;
+  endTime?: number;
+  signal?: AbortSignal;
+}): Promise<Array<{ metricName: string; metricType: 'gauge' }>> {
+  const metrics = new Set<string>();
+
+  const path = `/api/v1/tags/metrics?s=${startTime}&e=${endTime}&tagName=_cardinalhq.name&dataType=string`;
+
+  await streamJsonCollect(
+    datasourceId,
+    path,
+    undefined,
+    (msg) => {
+      const name = msg?.['_cardinalhq.name'];
+      if (name) {
+        metrics.add(name);
+      }
+    },
+    signal
+  );
+
+  return Array.from(metrics).map((metricName) => ({
+    metricName,
+    metricType: 'gauge',
+  }));
 }
