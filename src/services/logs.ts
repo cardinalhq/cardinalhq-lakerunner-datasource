@@ -2,6 +2,24 @@ import { Filter } from '../types';
 import { buildNestedFilter } from '../util/buildNestedFilter';
 import { apiFetchEventSourceWrapper, EventSourceOptions } from '../util/QueryUtils';
 
+const USER_LABEL_TO_INTERNAL: Record<string, string> = {
+  message: '_cardinalhq.message',
+  level: '_cardinalhq.level',
+};
+
+const INTERNAL_LABEL_TO_USER: Record<string, string> = {
+  '_cardinalhq.message': 'message',
+  '_cardinalhq.level': 'level',
+};
+
+function toInternalLabel(label: string): string {
+  return USER_LABEL_TO_INTERNAL[label] || label;
+}
+
+function toUserLabel(label: string): string {
+  return INTERNAL_LABEL_TO_USER[label] || label;
+}
+
 async function streamJsonCollect(
   datasourceId: number,
   path: string,
@@ -83,13 +101,20 @@ export async function fetchTagKeys({
           returnResults: true,
         }
       : undefined;
+
   await streamJsonCollect(
     datasourceId,
     path,
     body,
     (msg) => {
       if (msg && typeof msg === 'object') {
-        Object.keys(msg).forEach((k) => keys.add(k));
+        Object.keys(msg).forEach((k) => {
+          if (k === '_cardinalhq.level' || k === '_cardinalhq.message') {
+            keys.add(toUserLabel(k));
+          } else if (!k.startsWith('_cardinalhq.')) {
+            keys.add(k);
+          }
+        });
       }
     },
     signal
@@ -125,8 +150,10 @@ export async function fetchTagValues({
   }
   const vals = new Set<string>();
 
+  const internalLabel = toInternalLabel(labelName);
+
   const path = `/api/v1/tags/${mode}?s=${startTime}&e=${endTime}&tagName=${encodeURIComponent(
-    labelName
+    internalLabel
   )}&dataType=string`;
 
   const nestedFilter = buildNestedFilter(filters);
@@ -156,14 +183,7 @@ export async function fetchTagValues({
       filterEntries[`q${i++}`] = nestedFilter;
     }
 
-    if (Object.keys(filterEntries).length > 1) {
-      filter = {
-        ...filterEntries,
-        op: 'and',
-      };
-    } else {
-      filter = Object.values(filterEntries)[0];
-    }
+    filter = Object.keys(filterEntries).length > 1 ? { ...filterEntries, op: 'and' } : Object.values(filterEntries)[0];
 
     if (!filter) {
       filter = {
@@ -176,16 +196,14 @@ export async function fetchTagValues({
       };
     }
   } else {
-    filter =
-      nestedFilter ??
-      ({
-        k: labelName,
-        v: [''],
-        op: 'has',
-        dataType: 'string',
-        extracted: false,
-        computed: false,
-      } as const);
+    filter = nestedFilter ?? {
+      k: internalLabel,
+      v: [''],
+      op: 'has',
+      dataType: 'string',
+      extracted: false,
+      computed: false,
+    };
   }
 
   const body: Record<string, any> = {
@@ -205,7 +223,7 @@ export async function fetchTagValues({
     path,
     body,
     (msg) => {
-      const value = msg?.[labelName];
+      const value = msg?.[internalLabel];
       if (value !== undefined && value !== null) {
         vals.add(String(value));
       }

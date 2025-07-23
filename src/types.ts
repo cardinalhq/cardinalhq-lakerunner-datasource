@@ -1,7 +1,22 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData } from '@grafana/data';
 
-export type Operator = '=' | '!=' | 'in' | 'not_in';
+export type Operator = '=' | '!=' | 'in' | 'not_in' | 'contains' | 'not contains' | 'regex' | 'not regex';
+
+export const OPERATOR_OPTIONS: Array<{ label: string; value: Operator }> = [
+  { label: '=', value: '=' },
+  { label: '!=', value: '!=' },
+  { label: 'in', value: 'in' },
+  { label: 'not in', value: 'not_in' },
+  { label: 'contains', value: 'contains' },
+  { label: 'not contains', value: 'not contains' },
+  { label: 'regex', value: 'regex' },
+  { label: 'not regex', value: 'not regex' },
+];
+
+export const TEXT_OPERATORS: Operator[] = ['contains', 'not contains', 'regex', 'not regex'];
+
+export const MULTIVALUE_OPERATORS: Operator[] = ['in', 'not_in'];
 
 export interface Filter {
   tag: string;

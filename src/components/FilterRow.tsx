@@ -1,6 +1,6 @@
 import React from 'react';
-import { InlineFieldRow, InlineField, Combobox, IconButton, Button } from '@grafana/ui';
-import { Filter, Operator } from '../types';
+import { InlineFieldRow, InlineField, Combobox, IconButton, Button, Input } from '@grafana/ui';
+import { Filter, Operator, OPERATOR_OPTIONS, TEXT_OPERATORS } from '../types';
 import { useLabelValues } from '../hooks/useValues';
 import type { DataSource } from 'datasource';
 
@@ -38,6 +38,8 @@ export const FilterRow = ({
   const isMetricsMode = mode === 'metrics';
   const isLast = index === filters.length - 1;
 
+  const isTextOperator = TEXT_OPERATORS.includes(filter.op);
+
   const { data: values = [], isLoading: loadingValues } = useLabelValues({
     datasource,
     labelName: filter.tag,
@@ -51,7 +53,7 @@ export const FilterRow = ({
   const tagOptions = loadingLabels
     ? [{ label: 'Loading...', value: '__loading' }]
     : labels
-        .filter((l: string) => l !== '_cardinalhq.name') // exclude internal tag
+        .filter((l: string) => l !== '_cardinalhq.name')
         .map((l: string) => ({ label: l, value: l }))
         .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -67,8 +69,12 @@ export const FilterRow = ({
           value={filter.tag}
           onChange={(v) => {
             const selected = v?.value ?? '';
-            updateFilter(index, { tag: selected, value: [''] });
-            // onRunQuery();
+            const isMessage = selected === 'message';
+            updateFilter(index, {
+              tag: selected,
+              op: isMessage ? 'contains' : filter.op ?? '=',
+              value: [''],
+            });
           }}
           placeholder="Select label"
           disabled={loadingLabels}
@@ -78,17 +84,11 @@ export const FilterRow = ({
 
       <InlineField>
         <Combobox
-          width={8}
-          options={[
-            { label: '=', value: '=' },
-            { label: '!=', value: '!=' },
-            { label: 'in', value: 'in' },
-            { label: 'not in', value: 'not_in' },
-          ]}
+          width={10}
+          options={OPERATOR_OPTIONS}
           value={filter.op}
           onChange={(v) => {
-            updateFilter(index, { op: v?.value as Operator });
-            // onRunQuery();
+            updateFilter(index, { op: v?.value as Operator, value: [''] });
           }}
           placeholder="Op"
           disabled={!filter.tag}
@@ -96,19 +96,31 @@ export const FilterRow = ({
       </InlineField>
 
       <InlineField>
-        <Combobox
-          options={valueOptions}
-          value={filter.value?.[0]}
-          onChange={(v) => {
-            if (v?.value !== '__loading') {
-              updateFilter(index, { value: [v?.value ?? ''] });
-              // onRunQuery();
-            }
-          }}
-          placeholder="Select value"
-          disabled={!filter.tag}
-          loading={loadingValues}
-        />
+        {isTextOperator ? (
+          <Input
+            value={filter.value?.[0] ?? ''}
+            onChange={(e) => updateFilter(index, { value: [e.currentTarget.value] })}
+            width={30}
+            placeholder="Enter value"
+            disabled={!filter.tag}
+          />
+        ) : (
+          <InlineField>
+            <div style={!filter.tag ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
+              <Combobox
+                options={valueOptions}
+                value={filter.value?.[0]}
+                onChange={(v) => {
+                  if (v?.value !== '__loading') {
+                    updateFilter(index, { value: [v?.value ?? ''] });
+                  }
+                }}
+                placeholder="Select value"
+                loading={loadingValues}
+              />
+            </div>
+          </InlineField>
+        )}
       </InlineField>
 
       <InlineField>
