@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
-import { MultiSelect, InlineFieldRow, InlineField, TabsBar, Tab, Combobox } from '@grafana/ui';
 import { QueryEditorProps } from '@grafana/data';
+import { Combobox, InlineField, InlineFieldRow, MultiSelect, Tab, TabsBar } from '@grafana/ui';
+import React, { useEffect, useMemo, useState } from 'react';
 import { DataSource } from '../datasource';
-import { MyDataSourceOptions, MyQuery, Filter, Operator } from '../types';
 import { useLogLabels } from '../hooks/useLabels';
+import { Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
 import { FilterRow } from './FilterRow';
 
 const metrics_metadata = [
@@ -126,16 +126,37 @@ export function QueryEditor({
     return remaining.length > 0 ? remaining : [{ tag: '', op: '=' as Operator, value: [''] }];
   }, [query.filters]);
 
-  const startTime = query.timeFrom ?? range?.from.valueOf();
-  const endTime = query.timeTo ?? range?.to.valueOf();
+  const [timeRange, setTimeRange] = useState<{ startTime: number | undefined; endTime: number | undefined }>({
+    startTime: query.timeFrom ?? range?.from?.valueOf(),
+    endTime: query.timeTo ?? range?.to?.valueOf(),
+  });
+  // Update only if range changes in a meaningful way, and query doesn't have explicit times
+  useEffect(() => {
+    if (query.timeFrom || query.timeTo) {
+      // If query has explicit times, don't update
+      return;
+    }
+    if (range?.from && range?.to) {
+      setTimeRange((prev) => {
+        const prevStart = prev.startTime ?? 0;
+        const prevEnd = prev.endTime ?? 0;
+        const newStart = range.from.valueOf();
+        const newEnd = range.to.valueOf();
+        return {
+          startTime: newStart - prevStart > 1000 ? newStart : prevStart,
+          endTime: newEnd - prevEnd > 1000 ? newEnd : prevEnd,
+        };
+      });
+    }
+  }, [range?.from, range?.to, query.timeFrom, query.timeTo]);
 
   const { data: labels = [], isLoading: loadingLabels } = useLogLabels({
     datasource,
     filters,
     enabled: true,
     mode: query.mode,
-    startTime,
-    endTime,
+    startTime: timeRange.startTime,
+    endTime: timeRange.endTime,
   });
 
   const updateFilter = (index: number, patch: Partial<Filter>) => {
