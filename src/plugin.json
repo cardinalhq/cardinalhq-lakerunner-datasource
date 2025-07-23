@@ -7,12 +7,6 @@
   "streaming": true,
   "backend": true,
   "executable": "gpx_cardinalhq_datasource",
-  "jsonData": {
-    "customPath": ""
-  },
-  "secureJsonFields": {
-    "apiKey": true
-  },
   "info": {
     "description": "Explore and visualize logs and metrics stored in your own open-source private datalake",
     "author": {
