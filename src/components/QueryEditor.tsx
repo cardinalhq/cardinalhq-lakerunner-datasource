@@ -85,6 +85,13 @@ export function QueryEditor({
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
+  const groupByOptions = useMemo(() => {
+    return labels
+      .map((l) => ({ label: l, value: l }))
+      .filter((l) => l.value !== '_cardinalhq.name')
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [labels]);
+
   const selectedValue = query.metricName ?? '';
 
   const updateFilter = (index: number, patch: Partial<Filter>) => {
@@ -173,7 +180,7 @@ export function QueryEditor({
         <InlineField label="Group by" grow>
           <MultiSelect
             placeholder="Select labels"
-            options={labels.map((l) => ({ label: l, value: l })).filter((l) => l.value !== '_cardinalhq.name')}
+            options={groupByOptions}
             value={query.groupBy ?? []}
             onChange={(v) => {
               const selected = v.map((item) => item.value).filter((val): val is string => Boolean(val));
