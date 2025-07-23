@@ -52,13 +52,17 @@ export const FilterRow = ({
     ? [{ label: 'Loading...', value: '__loading' }]
     : labels
         .filter((l: string) => l !== '_cardinalhq.name') // exclude internal tag
-        .map((l: string) => ({ label: l, value: l }));
+        .map((l: string) => ({ label: l, value: l }))
+        .sort((a, b) => a.label.localeCompare(b.label));
+
+  const valueOptions = loadingValues
+    ? [{ label: 'Loading...', value: '__loading' }]
+    : values.map((v: string) => ({ label: v, value: v })).sort((a, b) => a.label.localeCompare(b.label));
 
   return (
-    <InlineFieldRow style={{ marginBottom: 4, gap: '4px', alignItems: 'center' }}>
+    <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
       <InlineField>
         <Combobox
-          width={20}
           options={tagOptions}
           value={filter.tag}
           onChange={(v) => {
@@ -93,12 +97,7 @@ export const FilterRow = ({
 
       <InlineField>
         <Combobox
-          width={20}
-          options={
-            loadingValues
-              ? [{ label: 'Loading...', value: '__loading' }]
-              : values.map((v: string) => ({ label: v, value: v }))
-          }
+          options={valueOptions}
           value={filter.value?.[0]}
           onChange={(v) => {
             if (v?.value !== '__loading') {
