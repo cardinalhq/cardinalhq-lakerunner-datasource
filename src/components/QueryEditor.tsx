@@ -63,8 +63,8 @@ export function QueryEditor({
       try {
         const metrics = await fetchMetricNames({
           datasourceId: datasource.id,
-          startTime,
-          endTime,
+          startTime: timeRange.startTime,
+          endTime: timeRange.endTime,
           signal: controller.signal,
         });
         setMetricOptions(metrics);
@@ -76,7 +76,7 @@ export function QueryEditor({
     }
 
     return () => controller.abort();
-  }, [datasource.id, isMetricsMode, startTime, endTime]);
+  }, [datasource.id, isMetricsMode, timeRange.startTime, timeRange.endTime]);
 
   const comboboxOptions = metricOptions.map((m) => ({
     label: m.metricName,
