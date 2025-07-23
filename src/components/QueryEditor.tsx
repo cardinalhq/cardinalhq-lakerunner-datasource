@@ -78,10 +78,12 @@ export function QueryEditor({
     return () => controller.abort();
   }, [datasource.id, isMetricsMode, timeRange.startTime, timeRange.endTime]);
 
-  const comboboxOptions = metricOptions.map((m) => ({
-    label: m.metricName,
-    value: m.metricName,
-  }));
+  const comboboxOptions = metricOptions
+    .map((m) => ({
+      label: m.metricName,
+      value: m.metricName,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   const selectedValue = query.metricName ?? '';
 
@@ -128,7 +130,7 @@ export function QueryEditor({
 
       {isMetricsMode && (
         <InlineFieldRow>
-          <InlineField label="Metric">
+          <InlineField label="Metric Name">
             <Combobox
               options={comboboxOptions}
               value={selectedValue}
