@@ -1,48 +1,46 @@
 import { Filter } from '../types';
-import {
-  apiFetchEventSourceWrapper,
-  EventSourceOptions,
-} from '../util/QueryUtils';
 import { buildNestedFilter } from '../util/buildNestedFilter';
+import { apiFetchEventSourceWrapper, EventSourceOptions } from '../util/QueryUtils';
 
 async function streamJsonCollect(
-  url: string,
+  datasourceId: number,
+  path: string,
   body: any,
-  headers: Record<string, string>,
   onData: (msg: any) => void,
   signal?: AbortSignal
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
+    const url = `/api/datasources/${datasourceId}/resources/proxy-stream`;
+
     const opts: EventSourceOptions = {
       method: 'POST',
-      body: JSON.stringify(body),
-      headers,
+      body: JSON.stringify({ path, body }),
+      headers: { 'Content-Type': 'application/json' },
       signal,
       openWhenHidden: true,
       onmessage(e) {
-        let parsed: any;
         try {
-          parsed = JSON.parse(e.data);
+          const parsed = JSON.parse(e.data);
+          if (parsed.type === 'data' && parsed.message) {
+            onData(parsed.message);
+          } else if (parsed.type === 'done') {
+            resolve();
+          }
         } catch (err) {
-          return reject(err);
-        }
-        if (parsed.type === 'data' && parsed.message) {
-          onData(parsed.message);
-        } else if (parsed.type === 'done') {
-          resolve();
+          reject(err);
         }
       },
       onerror(err) {
         reject(err);
       },
     };
+
     apiFetchEventSourceWrapper(url, opts);
   });
 }
 
 export async function fetchTagKeys({
-  apiUrl,
-  apiKey,
+  datasourceId,
   mode = 'logs',
   useRelativeTime = false,
   startTime,
@@ -50,8 +48,7 @@ export async function fetchTagKeys({
   filters = [],
   signal,
 }: {
-  apiUrl: string;
-  apiKey: string;
+  datasourceId: number;
   mode?: 'logs' | 'metrics';
   useRelativeTime?: boolean;
   startTime?: number;
@@ -59,10 +56,8 @@ export async function fetchTagKeys({
   filters?: Filter[];
   signal?: AbortSignal;
 }): Promise<string[]> {
-  const dataset = mode;
   const keys = new Set<string>();
-  const url = `${apiUrl}/api/v1/tags/${dataset}?s=${startTime}&e=${endTime}`;
-
+  const path = `/api/v1/tags/${mode}?s=${startTime}&e=${endTime}`;
   const nestedFilter = buildNestedFilter(filters);
   const fallbackFilter =
     mode === 'logs'
@@ -81,21 +76,17 @@ export async function fetchTagKeys({
   const body =
     !useRelativeTime && filter
       ? {
-          dataset,
+          mode,
           filter,
           limit: 1000,
           order: 'DESC',
           returnResults: true,
         }
       : undefined;
-
   await streamJsonCollect(
-    url,
+    datasourceId,
+    path,
     body,
-    {
-      'Content-Type': 'application/json',
-      'api-key': apiKey,
-    },
     (msg) => {
       if (msg && typeof msg === 'object') {
         Object.keys(msg).forEach((k) => keys.add(k));
@@ -108,8 +99,7 @@ export async function fetchTagKeys({
 }
 
 export async function fetchTagValues({
-  apiUrl,
-  apiKey,
+  datasourceId,
   mode = 'logs',
   metricName,
   metricType,
@@ -119,8 +109,7 @@ export async function fetchTagValues({
   startTime,
   endTime,
 }: {
-  apiUrl: string;
-  apiKey: string;
+  datasourceId: number;
   mode?: 'logs' | 'metrics';
   metricName?: string;
   metricType?: string;
@@ -134,11 +123,9 @@ export async function fetchTagValues({
   if (!labelName) {
     throw new Error('labelName is required');
   }
-
-  const dataset = mode;
   const vals = new Set<string>();
 
-  const url = `${apiUrl}/api/v1/tags/${dataset}?s=${startTime}&e=${endTime}&tagName=${encodeURIComponent(
+  const path = `/api/v1/tags/${mode}?s=${startTime}&e=${endTime}&tagName=${encodeURIComponent(
     labelName
   )}&dataType=string`;
 
@@ -168,20 +155,18 @@ export async function fetchTagValues({
       filter = metricNameFilter ?? nestedFilter;
     }
   } else {
-    filter =
-      nestedFilter ??
-      {
-        k: labelName,
-        v: [''],
-        op: 'has',
-        dataType: 'string',
-        extracted: false,
-        computed: false,
-      };
+    filter = nestedFilter ?? {
+      k: labelName,
+      v: [''],
+      op: 'has',
+      dataType: 'string',
+      extracted: false,
+      computed: false,
+    };
   }
 
   const body: Record<string, any> = {
-    dataset,
+    mode,
     filter,
     limit: 1000,
     order: 'DESC',
@@ -193,12 +178,9 @@ export async function fetchTagValues({
   }
 
   await streamJsonCollect(
-    url,
+    datasourceId,
+    path,
     body,
-    {
-      'Content-Type': 'application/json',
-      'api-key': apiKey,
-    },
     (msg) => {
       const value = msg?.[labelName];
       if (value !== undefined && value !== null) {

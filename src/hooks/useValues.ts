@@ -23,13 +23,17 @@ export function useLabelValues({
   mode = 'logs',
   metricName,
   metricType,
-  startTime,
-  endTime
+  startTime = Date.now() - 3600_000,
+  endTime = Date.now(),
 }: UseLabelValuesProps) {
   const isInternalMetricLabel = mode === 'metrics' && labelName === '_cardinalhq.name';
   const shouldRun = enabled && !!labelName && !isInternalMetricLabel && (mode !== 'metrics' || !!metricName);
 
-  const { data = [], isLoading, error } = useQuery<string[], Error>({
+  const {
+    data = [],
+    isLoading,
+    error,
+  } = useQuery<string[], Error>({
     queryKey: [
       'label-values',
       mode,
@@ -39,8 +43,7 @@ export function useLabelValues({
     ],
     queryFn: ({ signal }) =>
       fetchTagValues({
-        apiUrl: datasource.getApiUrl(),
-        apiKey: datasource.getApiKey(), 
+        datasourceId: datasource.id,
         mode,
         labelName,
         filters,
@@ -49,12 +52,11 @@ export function useLabelValues({
         metricName,
         metricType,
         startTime,
-        endTime
+        endTime,
       }),
     enabled: shouldRun,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
-
   return { data, isLoading, error };
 }

@@ -12,37 +12,30 @@ interface UseLabelsProps {
   endTime?: number;
 }
 
-export function useLogLabels({ 
+export function useLogLabels({
   datasource,
-  enabled, 
-  filters = [], 
+  enabled,
+  filters = [],
   mode = 'logs',
-  startTime = Date.now() - 3600_000,  
-  endTime   = Date.now(),
+  startTime = Date.now() - 3600_000,
+  endTime = Date.now(),
 }: UseLabelsProps) {
-  const queryKey = [
-    'labels',
-    mode,
-    String(startTime),
-    String(endTime),
-    JSON.stringify(filters),
-  ] as const;
+  const queryKey = ['labels', mode, String(startTime), String(endTime), JSON.stringify(filters)] as const;
 
   const { data = [], isLoading } = useQuery<string[], Error>({
     queryKey,
     queryFn: ({ signal }) =>
-      fetchTagKeys({ 
-        apiUrl: datasource.getApiUrl(),
-        apiKey: datasource.getApiKey(), 
-        useRelativeTime: true, 
-        filters, 
-        signal, 
+      fetchTagKeys({
+        datasourceId: datasource.id,
+        useRelativeTime: true,
+        filters,
+        signal,
         mode,
         startTime,
-        endTime 
+        endTime,
       }),
     enabled,
-    staleTime: 0,
+    staleTime: Infinity,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

@@ -41,7 +41,9 @@ export function apiFetchEventSourceWrapper(
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) {break;}
+        if (done) {
+          break;
+        }
         buffer += decoder.decode(value, { stream: true });
 
         let idx: number;
@@ -55,8 +57,12 @@ export function apiFetchEventSourceWrapper(
       }
     })
     .catch((err) => {
-      if (err.name === 'AbortError') {return;}
-      if (onerror) {onerror(err);}
+      if (err.name === 'AbortError') {
+        return;
+      }
+      if (onerror) {
+        onerror(err);
+      }
     });
 
   if (!openWhenHidden && controller) {

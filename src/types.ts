@@ -34,13 +34,10 @@ export interface DataSourceResponse {
   datapoints: Array<[number, number]>;
 }
 
-// ← PUBLIC settings, no apiKey here anymore
 export interface MyDataSourceOptions extends DataSourceJsonData {
   customPath?: string;
-  apiKey?: string;
 }
 
-// ← SECURE settings, stored encrypted
 export interface MySecureJsonData {
   apiKey?: string;
 }

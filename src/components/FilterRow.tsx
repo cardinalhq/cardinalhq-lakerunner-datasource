@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  InlineFieldRow,
-  InlineField,
-  Combobox,
-  IconButton,
-  Button,
-} from '@grafana/ui';
+import { InlineFieldRow, InlineField, Combobox, IconButton, Button } from '@grafana/ui';
 import { Filter, Operator } from '../types';
 import { useLabelValues } from '../hooks/useValues';
 import type { DataSource } from 'datasource';
@@ -132,7 +126,6 @@ export const FilterRow = ({
           <Button icon="plus" variant="secondary" onClick={addFilter} />
         </InlineField>
       )}
-
     </InlineFieldRow>
   );
 };
