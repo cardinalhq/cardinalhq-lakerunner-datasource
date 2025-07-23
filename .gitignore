@@ -45,3 +45,5 @@ ci/
 
 .eslintcache
 .DS_Store
+cardinalhq-lakerunner-datasource
+cardinalhq-lakerunner-datasource*.zip

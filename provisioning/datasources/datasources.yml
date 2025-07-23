@@ -1,10 +1,10 @@
 apiVersion: 1
 
 datasources:
-  - name: 'cardinalhq-datasource'
+  - name: 'Cardinal'
     type: 'cardinalhq-lakerunner-datasource'
     access: proxy
-    isDefault: false
+    isDefault: true
     orgId: 1
     version: 1
     editable: true
