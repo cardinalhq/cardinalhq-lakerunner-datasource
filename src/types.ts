@@ -14,6 +14,14 @@ export const OPERATOR_OPTIONS: Array<{ label: string; value: Operator }> = [
   { label: 'not regex', value: 'not regex' },
 ];
 
+export const AGGREGATE_OPTIONS = [
+  { label: 'Avg', value: 'avg' },
+  { label: 'Sum', value: 'sum' },
+  { label: 'Min', value: 'min' },
+  { label: 'Max', value: 'max' },
+];
+export type Aggregation = 'avg' | 'sum' | 'min' | 'max';
+
 export const TEXT_OPERATORS: Operator[] = ['contains', 'not contains', 'regex', 'not regex'];
 
 export const MULTIVALUE_OPERATORS: Operator[] = ['in', 'not_in'];
@@ -34,6 +42,7 @@ export interface MyQuery extends DataQuery {
   metricType?: 'gauge' | 'rate' | 'histogram';
   timeFrom?: number;
   timeTo?: number;
+  aggregation?: Aggregation;
 }
 
 export const DEFAULT_QUERY: Partial<MyQuery> = {

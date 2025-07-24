@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { InlineFieldRow, InlineField, Combobox, IconButton, Button, Input, MultiSelect } from '@grafana/ui';
-import { Filter, Operator, OPERATOR_OPTIONS, TEXT_OPERATORS } from '../types';
+import { AGGREGATE_OPTIONS, Aggregation, Filter, Operator, OPERATOR_OPTIONS, TEXT_OPERATORS } from '../types';
 import { useLabelValues } from '../hooks/useValues';
 import { useLogLabels } from '../hooks/useLabels';
 import type { DataSource } from 'datasource';
@@ -21,6 +21,8 @@ interface FilterRowProps {
   mode?: 'logs' | 'metrics';
   metricName?: string;
   metricType?: string;
+  aggregation?: string;
+  updateAggregation: (aggregation: Aggregation) => void;
 }
 
 export const FilterRow = ({
@@ -39,6 +41,8 @@ export const FilterRow = ({
   metricType,
   mode = 'logs',
   metricName,
+  aggregation,
+  updateAggregation,
 }: FilterRowProps) => {
   const isMetricsMode = mode === 'metrics';
   const isLast = index === filters.length - 1;
@@ -107,7 +111,7 @@ export const FilterRow = ({
                 value: [''],
               });
             }}
-            placeholder="Select label"
+            placeholder="Tag name"
             disabled={loadingGroupByLabels}
             loading={loadingGroupByLabels}
           />
@@ -150,7 +154,7 @@ export const FilterRow = ({
                     updateFilter(index, { value: [val] });
                   }
                 }}
-                placeholder="Select value"
+                placeholder="value"
                 loading={loadingValues}
               />
             </div>
@@ -182,17 +186,30 @@ export const FilterRow = ({
       </InlineFieldRow>
 
       {isLast && (
-        <InlineFieldRow style={{ marginTop: 4 }}>
-          <InlineField label="Group by" grow>
+        <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
+          <InlineField label="Group by">
             <MultiSelect
-              placeholder="Select labels"
+              placeholder="Group by"
               options={tagOptions}
               value={groupBy}
               onChange={(v) => {
                 const selected = v.map((item) => item.value).filter((val): val is string => Boolean(val));
                 updateGroupBy(selected);
               }}
-              width={40}
+              width={30}
+            />
+          </InlineField>
+
+          <InlineField label="Aggregation">
+            <Combobox
+              placeholder="Aggregation"
+              options={isMetricsMode ? AGGREGATE_OPTIONS : AGGREGATE_OPTIONS.filter((opt) => opt.value === 'sum')}
+              value={aggregation}
+              onChange={(v) => {
+                const selected = (v?.value ?? '') as Aggregation;
+                updateAggregation(selected);
+              }}
+              width={24}
             />
           </InlineField>
         </InlineFieldRow>

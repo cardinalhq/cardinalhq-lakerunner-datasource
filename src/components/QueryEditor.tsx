@@ -14,7 +14,10 @@ export function QueryEditor({
   range,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
   const isMetricsMode = query.mode === 'metrics';
-
+  const aggregation = query.aggregation ?? '';
+  const updateAggregation = (agg: 'avg' | 'sum' | 'min' | 'max') => {
+    onChange({ ...query, aggregation: agg });
+  };
   const filters: Filter[] = useMemo(() => {
     const remaining = query.filters?.filter((f) => f.tag !== '_cardinalhq.name') ?? [];
     return remaining.length > 0 ? remaining : [{ tag: '', op: '=' as Operator, value: [''] }];
@@ -157,6 +160,8 @@ export function QueryEditor({
           mode={query.mode}
           metricName={query.metricName}
           metricType={query.metricType}
+          aggregation={aggregation}
+          updateAggregation={updateAggregation}
         />
       ))}
     </div>

@@ -126,8 +126,8 @@ export class DataSource
       returnResults: true,
       filter: nestedFilter,
       chart: {
-        aggregation: isMetrics ? 'max' : 'sum',
-        rollup: isMetrics ? 'max' : 'sum',
+        aggregation: target.aggregation ?? (isMetrics ? 'max' : 'sum'),
+        rollup: target.aggregation ?? (isMetrics ? 'max' : 'sum'),
         groupBys: groupBy,
         type: isMetrics ? 'count' : 'rate',
       },
