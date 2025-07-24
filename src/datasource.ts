@@ -10,10 +10,10 @@ import {
   DataSourceWithSupplementaryQueriesSupport,
   toDataFrame,
 } from '@grafana/data';
-import { getBackendSrv } from '@grafana/runtime';
-import { firstValueFrom, Observable } from 'rxjs';
+import { Observable } from 'rxjs';
 import { MyQuery, MyDataSourceOptions, Filter } from './types';
 import { buildNestedFilter } from './util/buildNestedFilter';
+import { toInternalLabel } from './services/logs';
 
 export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
@@ -22,7 +22,6 @@ export class DataSource
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
     super(instanceSettings);
   }
-
   getSupportedSupplementaryQueryTypes(): SupplementaryQueryType[] {
     return [SupplementaryQueryType.LogsVolume, SupplementaryQueryType.LogsSample];
   }
@@ -59,10 +58,14 @@ export class DataSource
 
   query(request: DataQueryRequest<MyQuery>): Observable<DataQueryResponse> {
     return new Observable<DataQueryResponse>((subscriber) => {
+      const controller = new AbortController();
+      subscriber.add(() => controller.abort());
+
       const run = async () => {
         const target = request.targets[0];
         const MAX_INITIAL = 1000;
         let totalLogs = 0;
+
         const isMetrics = target.mode === 'metrics';
         if (isMetrics && !target.metricName) {
           subscriber.next({ data: [] });
@@ -71,7 +74,7 @@ export class DataSource
         }
 
         const filters: Filter[] = [...(target.filters ?? [])];
-        const groupBy: string[] = target.groupBy ?? [];
+        const groupBy: string[] = (target.groupBy ?? []).map(toInternalLabel);
 
         if (isMetrics && target.metricName) {
           filters.unshift({
@@ -90,7 +93,7 @@ export class DataSource
             dataType: 'string',
             extracted: false,
             computed: false,
-          };
+          } as any;
         }
 
         const from = request.range?.from.valueOf();
@@ -119,41 +122,121 @@ export class DataSource
           },
         };
 
-        try {
-          const res = await firstValueFrom(
-            getBackendSrv().fetch<string>({
-              url: `/api/datasources/${this.id}/resources/proxy-query`,
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              responseType: 'text',
-              data: {
-                path: `/api/v1/graph?s=${from}&e=${to}`,
-                body: payload,
-              },
-            })
-          );
+        const response = await fetch(`/api/datasources/${this.id}/resources/proxy-stream`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: `/api/v1/graph?s=${from}&e=${to}`,
+            body: payload,
+          }),
+          signal: controller.signal,
+        });
 
-          const lines = res?.data?.split('\n') ?? [];
-          const isVolume = target.queryText === 'volume' || target.refId.startsWith('volume-');
+        if (!response.ok || !response.body) {
+          throw new Error(`Streaming request failed (HTTP ${response.status})`);
+        }
 
-          const frameData: Record<string, { timestamps: number[]; values: number[] }> = {};
-          let emitCount = 0;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
 
-          const timestamps: number[] = [];
-          const bodies: string[] = [];
-          const severities: string[] = [];
-          const ids: string[] = [];
-          const labels: any[] = [];
+        const palette = [
+          '#7EB26D',
+          '#EAB839',
+          '#6ED0E0',
+          '#EF843C',
+          '#E24D42',
+          '#1F78C1',
+          '#BA43A9',
+          '#705DA0',
+          '#508642',
+          '#CCA300',
+          '#447EBC',
+          '#C15C17',
+        ];
 
-          for (const line of lines) {
-            const cleaned = line.trim();
-            if (!cleaned.startsWith('data:')) {
+        const frameData: Record<string, { timestamps: number[]; values: number[] }> = {};
+        let emitCount = 0;
+
+        const timestamps: number[] = [];
+        const bodies: string[] = [];
+        const severities: string[] = [];
+        const ids: string[] = [];
+        const labelsArr: any[] = [];
+
+        const flushMetricFrames = () => {
+          const frames = Object.entries(frameData).map(([label, series], idx) => {
+            const frame = toDataFrame({
+              refId: `${target.refId}-${idx}`,
+              name: label,
+              fields: [
+                { name: 'Time', type: FieldType.time, values: series.timestamps },
+                {
+                  name: 'Value',
+                  type: FieldType.number,
+                  values: series.values,
+                  config: {
+                    displayName: label,
+                    color: {
+                      mode: 'fixed',
+                      fixedColor: palette[idx % palette.length],
+                    },
+                  },
+                },
+              ],
+            });
+            frame.meta = { preferredVisualisationType: 'graph' };
+            return frame;
+          });
+          subscriber.next({ data: frames });
+        };
+
+        const flushLogFrame = () => {
+          const frame = toDataFrame({
+            refId: target.refId,
+            name: 'logs',
+            fields: [
+              { name: 'timestamp', type: FieldType.time, values: timestamps },
+              { name: 'body', type: FieldType.string, values: bodies },
+              { name: 'severity', type: FieldType.string, values: severities },
+              { name: 'id', type: FieldType.string, values: ids },
+              { name: 'labels', type: FieldType.other, values: labelsArr },
+            ],
+          });
+          frame.meta = {
+            type: DataFrameType.LogLines,
+            preferredVisualisationType: 'logs',
+            custom: { limit: 1000 },
+          };
+          subscriber.next({ data: [frame] });
+        };
+
+        let buffer = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split('\n');
+          buffer = lines.pop()!;
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line.startsWith('data:')) {
               continue;
             }
 
             try {
-              const parsed = JSON.parse(cleaned.slice(5).trim());
+              const parsed = JSON.parse(line.slice(5).trim());
               const msg = parsed.message;
+
+              if (!msg) {
+                continue;
+              }
+
+              const isVolume = target.queryText === 'volume' || target.refId.startsWith('volume-');
 
               if (isMetrics || isVolume) {
                 const ts = msg.timestamp;
@@ -167,12 +250,11 @@ export class DataSource
                   labelParts.push(`${prettyKey}=${value ?? 'unknown'}`);
                 }
 
-                const label =
-                  labelParts.length > 0
-                    ? labelParts.join(', ')
-                    : isMetrics
-                    ? target.metricName ?? 'metric'
-                    : 'log.events';
+                const label = labelParts.length
+                  ? labelParts.join(', ')
+                  : isMetrics
+                  ? target.metricName ?? 'metric'
+                  : 'log.events';
 
                 if (!frameData[label]) {
                   frameData[label] = { timestamps: [], values: [] };
@@ -183,52 +265,9 @@ export class DataSource
 
                 emitCount++;
                 if (emitCount % 10 === 0) {
-                  const palette = [
-                    '#7EB26D',
-                    '#EAB839',
-                    '#6ED0E0',
-                    '#EF843C',
-                    '#E24D42',
-                    '#1F78C1',
-                    '#BA43A9',
-                    '#705DA0',
-                    '#508642',
-                    '#CCA300',
-                    '#447EBC',
-                    '#C15C17',
-                  ];
-
-                  const frames = Object.entries(frameData).map(([label, series], idx) => {
-                    const frame = toDataFrame({
-                      refId: `${target.refId}-${idx}`,
-                      name: label,
-                      fields: [
-                        { name: 'Time', type: FieldType.time, values: series.timestamps },
-                        {
-                          name: 'Value',
-                          type: FieldType.number,
-                          values: series.values,
-                          config: {
-                            displayName: label,
-                            color: {
-                              mode: 'fixed',
-                              fixedColor: palette[idx % palette.length],
-                            },
-                          },
-                        },
-                      ],
-                    });
-
-                    frame.meta = {
-                      preferredVisualisationType: 'graph',
-                    };
-
-                    return frame;
-                  });
-
-                  subscriber.next({ data: frames });
+                  flushMetricFrames();
                 }
-              } else if (!isMetrics && parsed.type === 'event') {
+              } else if (parsed.type === 'event') {
                 const ts = msg.timestamp;
                 const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
                 const severity = msg.tags?.['_cardinalhq.level'] || '';
@@ -242,7 +281,7 @@ export class DataSource
                   bodies.push(body);
                   severities.push(severity);
                   ids.push(id);
-                  labels.push(labelTags);
+                  labelsArr.push(labelTags);
                 } else {
                   const tempFrame = toDataFrame({
                     refId: target.refId,
@@ -255,52 +294,36 @@ export class DataSource
                       { name: 'labels', type: FieldType.other, values: [labelTags] },
                     ],
                   });
-
                   tempFrame.meta = {
                     type: DataFrameType.LogLines,
                     preferredVisualisationType: 'logs',
                     custom: { limit: 1000 },
                   };
-
                   subscriber.next({ data: [tempFrame] });
                 }
               }
-            } catch (_) {}
-          }
-
-          if (!isMetrics && totalLogs > 0 && totalLogs <= MAX_INITIAL) {
-            const finalFrame = toDataFrame({
-              refId: target.refId,
-              name: 'logs',
-              fields: [
-                { name: 'timestamp', type: FieldType.time, values: timestamps },
-                { name: 'body', type: FieldType.string, values: bodies },
-                { name: 'severity', type: FieldType.string, values: severities },
-                { name: 'id', type: FieldType.string, values: ids },
-                { name: 'labels', type: FieldType.other, values: labels },
-              ],
-            });
-
-            finalFrame.meta = {
-              type: DataFrameType.LogLines,
-              preferredVisualisationType: 'logs',
-              custom: { limit: 1000 },
-            };
-
-            subscriber.next({ data: [finalFrame] });
-          }
-
-          subscriber.complete();
-        } catch (err) {
-          if ((err as Error).name === 'AbortError') {
-            console.log('Fetch aborted');
-          } else {
-            subscriber.error(err);
+            } catch (err) {
+              console.log('Failed to parse stream line', err);
+            }
           }
         }
+
+        if (isMetrics) {
+          flushMetricFrames();
+        } else if (totalLogs > 0 && totalLogs <= MAX_INITIAL) {
+          flushLogFrame();
+        }
+
+        subscriber.complete();
       };
 
-      run();
+      run().catch((err) => {
+        if ((err as any).name === 'AbortError') {
+          subscriber.complete();
+        } else {
+          subscriber.error(err);
+        }
+      });
     });
   }
 

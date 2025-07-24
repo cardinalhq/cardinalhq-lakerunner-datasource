@@ -12,11 +12,11 @@ const INTERNAL_LABEL_TO_USER: Record<string, string> = {
   '_cardinalhq.level': 'level',
 };
 
-function toInternalLabel(label: string): string {
+export function toInternalLabel(label: string): string {
   return USER_LABEL_TO_INTERNAL[label] || label;
 }
 
-function toUserLabel(label: string): string {
+export function toUserLabel(label: string): string {
   return INTERNAL_LABEL_TO_USER[label] || label;
 }
 

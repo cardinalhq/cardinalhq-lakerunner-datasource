@@ -114,10 +114,8 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 
 	fullURL := strings.TrimRight(config.JsonData.CustomPath, "/") + incoming.Path
 
-	// Choose GET if no body, POST otherwise
 	method := http.MethodPost
 	var bodyReader io.Reader
-
 	if incoming.Body == nil {
 		bodyReader = nil
 	} else {
@@ -127,10 +125,11 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 
 	httpReq, _ := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
 	httpReq.Header.Set("api-key", config.Secrets.ApiKey)
-
 	if method == http.MethodPost {
 		httpReq.Header.Set("Content-Type", "application/json")
 	}
+
+	httpReq.Header.Set("Accept", "text/event-stream")
 
 	resp, err := http.DefaultClient.Do(httpReq)
 	if err != nil {
@@ -141,10 +140,35 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 	}
 	defer resp.Body.Close()
 
-	respBody, _ := io.ReadAll(resp.Body)
+	first := true
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			out := &backend.CallResourceResponse{
+				Status: resp.StatusCode,
+				Body:   append([]byte(nil), buf[:n]...), 
+			}
+			if first {
+				out.Headers = map[string][]string{
+					"Content-Type": resp.Header.Values("Content-Type"),
+				}
+				first = false
+			}
+			if sendErr := sender.Send(out); sendErr != nil {
+				return sendErr
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
 
-	return sender.Send(&backend.CallResourceResponse{
-		Status: resp.StatusCode,
-		Body:   respBody,
-	})
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadGateway,
+				Body:   []byte(fmt.Sprintf("stream interrupted: %v", err)),
+			})
+		}
+	}
+	return nil
 }

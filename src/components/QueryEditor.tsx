@@ -1,6 +1,6 @@
 import { QueryEditorProps } from '@grafana/data';
 import { Combobox, InlineField, InlineFieldRow, MultiSelect, Tab, TabsBar } from '@grafana/ui';
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { DataSource } from '../datasource';
 import { useLogLabels } from '../hooks/useLabels';
 import { Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
@@ -25,10 +25,9 @@ export function QueryEditor({
     startTime: query.timeFrom ?? range?.from?.valueOf(),
     endTime: query.timeTo ?? range?.to?.valueOf(),
   });
-  // Update only if range changes in a meaningful way, and query doesn't have explicit times
+
   useEffect(() => {
     if (query.timeFrom || query.timeTo) {
-      // If query has explicit times, don't update
       return;
     }
     if (range?.from && range?.to) {
@@ -55,8 +54,13 @@ export function QueryEditor({
   });
 
   const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: 'gauge' }>>([]);
+  const hasLoadedMetrics = useRef(false);
 
   useEffect(() => {
+    if (!isMetricsMode || hasLoadedMetrics.current) {
+      return;
+    }
+
     const controller = new AbortController();
 
     const loadMetrics = async () => {
@@ -68,12 +72,11 @@ export function QueryEditor({
           signal: controller.signal,
         });
         setMetricOptions(metrics);
+        hasLoadedMetrics.current = true;
       } catch {}
     };
 
-    if (isMetricsMode) {
-      loadMetrics();
-    }
+    loadMetrics();
 
     return () => controller.abort();
   }, [datasource.id, isMetricsMode, timeRange.startTime, timeRange.endTime]);
@@ -128,7 +131,6 @@ export function QueryEditor({
                 metricName: undefined,
                 metricType: undefined,
               });
-              onRunQuery();
             }}
           />
         ))}
