@@ -1,7 +1,8 @@
-import React from 'react';
-import { InlineFieldRow, InlineField, Combobox, IconButton, Button, Input } from '@grafana/ui';
+import React, { useMemo } from 'react';
+import { InlineFieldRow, InlineField, Combobox, IconButton, Button, Input, MultiSelect } from '@grafana/ui';
 import { Filter, Operator, OPERATOR_OPTIONS, TEXT_OPERATORS } from '../types';
 import { useLabelValues } from '../hooks/useValues';
+import { useLogLabels } from '../hooks/useLabels';
 import type { DataSource } from 'datasource';
 
 interface FilterRowProps {
@@ -11,11 +12,11 @@ interface FilterRowProps {
   endTime?: number;
   filter: Filter;
   filters: Filter[];
-  labels: string[];
-  loadingLabels: boolean;
   updateFilter: (index: number, patch: Partial<Filter>) => void;
   removeFilter: (index: number) => void;
   addFilter: () => void;
+  updateGroupBy: (labels: string[]) => void;
+  groupBy: string[];
   onRunQuery: () => void;
   mode?: 'logs' | 'metrics';
   metricName?: string;
@@ -29,11 +30,11 @@ export const FilterRow = ({
   endTime,
   filter,
   filters,
-  labels,
-  loadingLabels,
   updateFilter,
   removeFilter,
   addFilter,
+  updateGroupBy,
+  groupBy,
   onRunQuery,
   metricType,
   mode = 'logs',
@@ -41,14 +42,28 @@ export const FilterRow = ({
 }: FilterRowProps) => {
   const isMetricsMode = mode === 'metrics';
   const isLast = index === filters.length - 1;
-
   const isTextOperator = TEXT_OPERATORS.includes(filter.op);
+
+  const hasValidTagAndValue = !!filter.tag?.trim() && !!filter.value?.[0]?.trim();
+
+  const scopedFilters = useMemo(() => {
+    const prior = filters.slice(0, index);
+    const current = hasValidTagAndValue ? [filter] : [];
+    const full = [...prior, ...current];
+    return full;
+  }, [filters, filter, index, hasValidTagAndValue]);
+
+  const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName);
+  const isInitial = filters.length === 1 && !filters[0].tag;
+  const hasAnyScopedFilters = filters.slice(0, index).some((f) => !!f.tag?.trim() && !!f.value?.[0]?.trim());
+
+  const shouldRunLabels = isLast && (isInitial || hasAnyScopedFilters || hasValidTagAndValue);
 
   const { data: values = [], isLoading: loadingValues } = useLabelValues({
     datasource,
     labelName: filter.tag,
-    filters: filters.slice(0, index),
-    enabled: !!filter.tag && (!isMetricsMode || !!metricName),
+    filters: scopedFilters,
+    enabled: shouldRunValues,
     mode,
     metricName,
     metricType,
@@ -56,93 +71,132 @@ export const FilterRow = ({
     endTime,
   });
 
-  const tagOptions = loadingLabels
-    ? [{ label: 'Loading...', value: '__loading' }]
-    : labels
-        .filter((l: string) => l !== '_cardinalhq.name')
-        .map((l: string) => ({ label: l, value: l }))
-        .sort((a, b) => a.label.localeCompare(b.label));
+  const { data: groupByLabels = [], isLoading: loadingGroupByLabels } = useLogLabels({
+    datasource,
+    filters: scopedFilters,
+    enabled: shouldRunLabels,
+    mode,
+    startTime,
+    endTime,
+    metricName,
+    metricType,
+  });
+
+  const tagOptions = groupByLabels
+    .filter((l: string) => l !== '_cardinalhq.name')
+    .map((l: string) => ({ label: l, value: l }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   const valueOptions = loadingValues
     ? [{ label: 'Loading...', value: '__loading' }]
     : values.map((v: string) => ({ label: v, value: v })).sort((a, b) => a.label.localeCompare(b.label));
 
   return (
-    <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
-      <InlineField>
-        <Combobox
-          options={tagOptions}
-          value={filter.tag}
-          onChange={(v) => {
-            const selected = v?.value ?? '';
-            const isMessage = selected === 'message';
-            updateFilter(index, {
-              tag: selected,
-              op: isMessage ? 'contains' : filter.op ?? '=',
-              value: [''],
-            });
-          }}
-          placeholder="Select label"
-          disabled={loadingLabels}
-          loading={loadingLabels}
-        />
-      </InlineField>
+    <>
+      <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
+        <InlineField>
+          <Combobox
+            options={tagOptions}
+            value={filter.tag}
+            onChange={(v) => {
+              const selected = v?.value ?? '';
+              const isMessage = selected === 'message';
+              updateFilter(index, {
+                tag: selected,
+                op: isMessage ? 'contains' : filter.op ?? '=',
+                value: [''],
+              });
+            }}
+            placeholder="Select label"
+            disabled={loadingGroupByLabels}
+            loading={loadingGroupByLabels}
+          />
+        </InlineField>
 
-      <InlineField>
-        <Combobox
-          width={10}
-          options={OPERATOR_OPTIONS}
-          value={filter.op}
-          onChange={(v) => {
-            updateFilter(index, { op: v?.value as Operator, value: [''] });
-          }}
-          placeholder="Op"
-          disabled={!filter.tag}
-        />
-      </InlineField>
-
-      <InlineField>
-        {isTextOperator ? (
-          <Input
-            value={filter.value?.[0] ?? ''}
-            onChange={(e) => updateFilter(index, { value: [e.currentTarget.value] })}
-            width={30}
-            placeholder="Enter value"
+        <InlineField>
+          <Combobox
+            width={10}
+            options={OPERATOR_OPTIONS}
+            value={filter.op}
+            onChange={(v) => {
+              const selectedOp = v?.value as Operator;
+              updateFilter(index, { op: selectedOp, value: [''] });
+            }}
+            placeholder="Op"
             disabled={!filter.tag}
           />
-        ) : (
-          <InlineField>
+        </InlineField>
+
+        <InlineField>
+          {isTextOperator ? (
+            <Input
+              value={filter.value?.[0] ?? ''}
+              onChange={(e) => {
+                const val = e.currentTarget.value;
+                updateFilter(index, { value: [val] });
+              }}
+              width={30}
+              placeholder="Enter value"
+              disabled={!filter.tag}
+            />
+          ) : (
             <div style={!filter.tag ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
               <Combobox
                 options={valueOptions}
                 value={filter.value?.[0]}
                 onChange={(v) => {
-                  if (v?.value !== '__loading') {
-                    updateFilter(index, { value: [v?.value ?? ''] });
+                  const val = v?.value ?? '';
+                  if (val !== '__loading') {
+                    updateFilter(index, { value: [val] });
                   }
                 }}
                 placeholder="Select value"
                 loading={loadingValues}
               />
             </div>
+          )}
+        </InlineField>
+
+        <InlineField>
+          <IconButton
+            name="trash-alt"
+            title="Remove filter"
+            aria-label="Remove filter"
+            onClick={() => {
+              removeFilter(index);
+            }}
+          />
+        </InlineField>
+
+        {isLast && (
+          <InlineField>
+            <Button
+              icon="plus"
+              variant="secondary"
+              onClick={() => {
+                addFilter();
+              }}
+            />
           </InlineField>
         )}
-      </InlineField>
-
-      <InlineField>
-        <IconButton
-          name="trash-alt"
-          title="Remove filter"
-          aria-label="Remove filter"
-          onClick={() => removeFilter(index)}
-        />
-      </InlineField>
+      </InlineFieldRow>
 
       {isLast && (
-        <InlineField>
-          <Button icon="plus" variant="secondary" onClick={addFilter} />
-        </InlineField>
+        <InlineFieldRow style={{ marginTop: 4 }}>
+          <InlineField label="Group by" grow>
+            <MultiSelect
+              placeholder="Select labels"
+              options={tagOptions}
+              value={groupBy}
+              onChange={(v) => {
+                const selected = v.map((item) => item.value).filter((val): val is string => Boolean(val));
+                updateGroupBy(selected);
+              }}
+              width={40}
+            />
+          </InlineField>
+        </InlineFieldRow>
       )}
-    </InlineFieldRow>
+    </>
   );
 };

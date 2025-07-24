@@ -29,18 +29,20 @@ export function useLabelValues({
   const isInternalMetricLabel = mode === 'metrics' && labelName === '_cardinalhq.name';
   const shouldRun = enabled && !!labelName && !isInternalMetricLabel && (mode !== 'metrics' || !!metricName);
 
+  const queryKey = [
+    'label-values',
+    mode,
+    labelName,
+    metricName,
+    filters.map((f) => `${f.tag}:${f.op}:${f.value.join(',')}`).join('|'),
+  ];
+
   const {
     data = [],
     isLoading,
     error,
   } = useQuery<string[], Error>({
-    queryKey: [
-      'label-values',
-      mode,
-      labelName,
-      metricName,
-      filters.map((f) => `${f.tag}:${f.op}:${f.value.join(',')}`).join('|'),
-    ],
+    queryKey,
     queryFn: ({ signal }) =>
       fetchTagValues({
         datasourceId: datasource.id,
@@ -58,5 +60,6 @@ export function useLabelValues({
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
   return { data, isLoading, error };
 }

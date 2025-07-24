@@ -64,6 +64,8 @@ export async function fetchTagKeys({
   startTime,
   endTime,
   filters = [],
+  metricName,
+  metricType,
   signal,
 }: {
   datasourceId: number;
@@ -72,11 +74,14 @@ export async function fetchTagKeys({
   startTime?: number;
   endTime?: number;
   filters?: Filter[];
+  metricName?: string;
+  metricType?: string;
   signal?: AbortSignal;
 }): Promise<string[]> {
   const keys = new Set<string>();
   const path = `/api/v1/tags/${mode}?s=${startTime}&e=${endTime}`;
   const nestedFilter = buildNestedFilter(filters);
+
   const fallbackFilter =
     mode === 'logs'
       ? {
@@ -89,18 +94,53 @@ export async function fetchTagKeys({
         }
       : undefined;
 
-  const filter = nestedFilter ?? fallbackFilter;
+  let filter;
+  if (mode === 'metrics') {
+    const filterEntries: Record<string, any> = {};
+    let i = 1;
 
-  const body =
-    !useRelativeTime && filter
-      ? {
-          mode,
-          filter,
-          limit: 1000,
-          order: 'DESC',
-          returnResults: true,
-        }
-      : undefined;
+    if (metricName) {
+      filterEntries[`q${i++}`] = {
+        k: '_cardinalhq.name',
+        v: [metricName],
+        op: 'eq',
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      };
+    }
+
+    if (nestedFilter) {
+      filterEntries[`q${i++}`] = nestedFilter;
+    }
+
+    filter = Object.keys(filterEntries).length > 1 ? { ...filterEntries, op: 'and' } : Object.values(filterEntries)[0];
+
+    if (!filter) {
+      filter = {
+        k: '_cardinalhq.name',
+        v: [''],
+        op: 'has',
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      };
+    }
+  } else {
+    filter = nestedFilter ?? fallbackFilter;
+  }
+
+  const body: Record<string, any> = {
+    dataset: mode,
+    filter,
+    limit: 1000,
+    order: 'DESC',
+    returnResults: true,
+  };
+
+  if (mode === 'metrics' && metricType) {
+    body.metricType = metricType;
+  }
 
   await streamJsonCollect(
     datasourceId,
@@ -148,10 +188,9 @@ export async function fetchTagValues({
   if (!labelName) {
     throw new Error('labelName is required');
   }
+
   const vals = new Set<string>();
-
   const internalLabel = toInternalLabel(labelName);
-
   const path = `/api/v1/tags/${mode}?s=${startTime}&e=${endTime}&tagName=${encodeURIComponent(
     internalLabel
   )}&dataType=string`;
@@ -171,18 +210,15 @@ export async function fetchTagValues({
       : undefined;
 
   let filter;
-
   if (mode === 'metrics') {
     const filterEntries: Record<string, any> = {};
     let i = 1;
-
     if (metricNameFilter) {
       filterEntries[`q${i++}`] = metricNameFilter;
     }
     if (nestedFilter) {
       filterEntries[`q${i++}`] = nestedFilter;
     }
-
     filter = Object.keys(filterEntries).length > 1 ? { ...filterEntries, op: 'and' } : Object.values(filterEntries)[0];
 
     if (!filter) {
@@ -246,7 +282,6 @@ export async function fetchMetricNames({
   signal?: AbortSignal;
 }): Promise<Array<{ metricName: string; metricType: 'gauge' }>> {
   const metrics = new Set<string>();
-
   const path = `/api/v1/tags/metrics?s=${startTime}&e=${endTime}&tagName=_cardinalhq.name&dataType=string`;
 
   await streamJsonCollect(

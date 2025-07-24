@@ -1,7 +1,7 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData } from '@grafana/data';
 
-export type Operator = '=' | '!=' | 'in' | 'not_in' | 'contains' | 'not contains' | 'regex' | 'not regex';
+export type Operator = '=' | '!=' | 'in' | 'not_in' | 'contains' | 'not contains' | 'regex' | 'not regex' | 'has';
 
 export const OPERATOR_OPTIONS: Array<{ label: string; value: Operator }> = [
   { label: '=', value: '=' },
