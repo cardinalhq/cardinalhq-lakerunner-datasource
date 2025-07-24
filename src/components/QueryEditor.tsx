@@ -37,8 +37,8 @@ export function QueryEditor({
         const newStart = range.from.valueOf();
         const newEnd = range.to.valueOf();
         return {
-          startTime: newStart - prevStart > 1000 ? newStart : prevStart,
-          endTime: newEnd - prevEnd > 1000 ? newEnd : prevEnd,
+          startTime: Math.abs(newStart - prevStart) > 1000 ? newStart : prevStart,
+          endTime: Math.abs(newEnd - prevEnd) > 1000 ? newEnd : prevEnd,
         };
       });
     }
@@ -163,6 +163,8 @@ export function QueryEditor({
           datasource={datasource}
           key={index}
           index={index}
+          startTime={timeRange.startTime}
+          endTime={timeRange.endTime}
           filter={filter}
           filters={filters}
           labels={labels}

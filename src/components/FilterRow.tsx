@@ -7,6 +7,8 @@ import type { DataSource } from 'datasource';
 interface FilterRowProps {
   datasource: DataSource;
   index: number;
+  startTime?: number;
+  endTime?: number;
   filter: Filter;
   filters: Filter[];
   labels: string[];
@@ -23,6 +25,8 @@ interface FilterRowProps {
 export const FilterRow = ({
   datasource,
   index,
+  startTime,
+  endTime,
   filter,
   filters,
   labels,
@@ -48,6 +52,8 @@ export const FilterRow = ({
     mode,
     metricName,
     metricType,
+    startTime,
+    endTime,
   });
 
   const tagOptions = loadingLabels
