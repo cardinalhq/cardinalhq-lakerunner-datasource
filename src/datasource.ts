@@ -9,6 +9,7 @@ import {
   SupplementaryQueryType,
   DataSourceWithSupplementaryQueriesSupport,
   toDataFrame,
+  DataFrame,
 } from '@grafana/data';
 import { Observable } from 'rxjs';
 import { MyQuery, MyDataSourceOptions, Filter } from './types';
@@ -52,7 +53,6 @@ export class DataSource
     const targets = request.targets
       .map((query) => this.getSupplementaryQuery({ type, ...options }, query))
       .filter((q): q is MyQuery => !!q);
-
     return targets.length ? { ...request, targets } : undefined;
   }
 
@@ -62,258 +62,18 @@ export class DataSource
       subscriber.add(() => controller.abort());
 
       const run = async () => {
-        const target = request.targets[0];
-        const MAX_INITIAL = 1000;
-        let totalLogs = 0;
+        const allFrames: any[] = [];
 
-        const isMetrics = target.mode === 'metrics';
-        if (isMetrics && !target.metricName) {
-          subscriber.next({ data: [] });
-          subscriber.complete();
-          return;
-        }
-
-        const filters: Filter[] = [...(target.filters ?? [])];
-        const groupBy: string[] = (target.groupBy ?? []).map(toInternalLabel);
-
-        if (isMetrics && target.metricName) {
-          filters.unshift({
-            tag: '_cardinalhq.name',
-            op: '=',
-            value: [target.metricName],
-          });
-        }
-
-        let nestedFilter = buildNestedFilter(filters);
-        if (!nestedFilter && !isMetrics) {
-          nestedFilter = {
-            k: '_cardinalhq.name',
-            v: [''],
-            op: 'has',
-            dataType: 'string',
-            extracted: false,
-            computed: false,
-          } as any;
-        }
-
-        const from = request.range?.from.valueOf();
-        const to = request.range?.to.valueOf();
-
-        const dataset = isMetrics ? 'metrics' : 'logs';
-        const expression: any = {
-          dataset,
-          returnResults: true,
-          filter: nestedFilter,
-          chart: {
-            aggregation: isMetrics ? 'max' : 'sum',
-            rollup: isMetrics ? 'max' : 'sum',
-            groupBys: groupBy,
-            type: isMetrics ? 'count' : 'rate',
-          },
-        };
-
-        if (isMetrics && target.metricType) {
-          expression.metricType = target.metricType;
-        }
-
-        const payload = {
-          baseExpressions: {
-            a: expression,
-          },
-        };
-
-        const response = await fetch(`/api/datasources/${this.id}/resources/proxy-stream`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            path: `/api/v1/graph?s=${from}&e=${to}`,
-            body: payload,
-          }),
-          signal: controller.signal,
-        });
-
-        if (!response.ok || !response.body) {
-          throw new Error(`Streaming request failed (HTTP ${response.status})`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-
-        const palette = [
-          '#7EB26D',
-          '#EAB839',
-          '#6ED0E0',
-          '#EF843C',
-          '#E24D42',
-          '#1F78C1',
-          '#BA43A9',
-          '#705DA0',
-          '#508642',
-          '#CCA300',
-          '#447EBC',
-          '#C15C17',
-        ];
-
-        const frameData: Record<string, { timestamps: number[]; values: number[] }> = {};
-        let emitCount = 0;
-
-        const timestamps: number[] = [];
-        const bodies: string[] = [];
-        const severities: string[] = [];
-        const ids: string[] = [];
-        const labelsArr: any[] = [];
-
-        const flushMetricFrames = () => {
-          const frames = Object.entries(frameData).map(([label, series], idx) => {
-            const frame = toDataFrame({
-              refId: `${target.refId}-${idx}`,
-              name: label,
-              fields: [
-                { name: 'Time', type: FieldType.time, values: series.timestamps },
-                {
-                  name: 'Value',
-                  type: FieldType.number,
-                  values: series.values,
-                  config: {
-                    displayName: label,
-                    color: {
-                      mode: 'fixed',
-                      fixedColor: palette[idx % palette.length],
-                    },
-                  },
-                },
-              ],
-            });
-            frame.meta = { preferredVisualisationType: 'graph' };
-            return frame;
-          });
-          subscriber.next({ data: frames });
-        };
-
-        const flushLogFrame = () => {
-          const frame = toDataFrame({
-            refId: target.refId,
-            name: 'logs',
-            fields: [
-              { name: 'timestamp', type: FieldType.time, values: timestamps },
-              { name: 'body', type: FieldType.string, values: bodies },
-              { name: 'severity', type: FieldType.string, values: severities },
-              { name: 'id', type: FieldType.string, values: ids },
-              { name: 'labels', type: FieldType.other, values: labelsArr },
-            ],
-          });
-          frame.meta = {
-            type: DataFrameType.LogLines,
-            preferredVisualisationType: 'logs',
-            custom: { limit: 1000 },
-          };
-          subscriber.next({ data: [frame] });
-        };
-
-        let buffer = '';
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) {
-            break;
-          }
-
-          buffer += decoder.decode(value, { stream: true });
-
-          const lines = buffer.split('\n');
-          buffer = lines.pop()!;
-
-          for (const rawLine of lines) {
-            const line = rawLine.trim();
-            if (!line.startsWith('data:')) {
-              continue;
-            }
-
+        await Promise.all(
+          request.targets.map(async (target) => {
             try {
-              const parsed = JSON.parse(line.slice(5).trim());
-              const msg = parsed.message;
+              const frames = await this.runSingleQuery(target, request.range, controller.signal);
+              allFrames.push(...frames);
+            } catch (err) {}
+          })
+        );
 
-              if (!msg) {
-                continue;
-              }
-
-              const isVolume = target.queryText === 'volume' || target.refId.startsWith('volume-');
-
-              if (isMetrics || isVolume) {
-                const ts = msg.timestamp;
-                const val = msg.value ?? 0;
-                const tags = msg.tags ?? {};
-
-                const labelParts: string[] = [];
-                for (const key of groupBy) {
-                  const value = tags[key];
-                  const prettyKey = key.replace(/^_cardinalhq\./, '');
-                  labelParts.push(`${prettyKey}=${value ?? 'unknown'}`);
-                }
-
-                const label = labelParts.length
-                  ? labelParts.join(', ')
-                  : isMetrics
-                  ? target.metricName ?? 'metric'
-                  : 'log.events';
-
-                if (!frameData[label]) {
-                  frameData[label] = { timestamps: [], values: [] };
-                }
-
-                frameData[label].timestamps.push(ts);
-                frameData[label].values.push(val);
-
-                emitCount++;
-                if (emitCount % 10 === 0) {
-                  flushMetricFrames();
-                }
-              } else if (parsed.type === 'event') {
-                const ts = msg.timestamp;
-                const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
-                const severity = msg.tags?.['_cardinalhq.level'] || '';
-                const id = msg.tags?.['_cardinalhq.id'] || '';
-                const labelTags = msg.tags || {};
-
-                totalLogs++;
-
-                if (totalLogs <= MAX_INITIAL) {
-                  timestamps.push(ts);
-                  bodies.push(body);
-                  severities.push(severity);
-                  ids.push(id);
-                  labelsArr.push(labelTags);
-                } else {
-                  const tempFrame = toDataFrame({
-                    refId: target.refId,
-                    name: 'logs',
-                    fields: [
-                      { name: 'timestamp', type: FieldType.time, values: [ts] },
-                      { name: 'body', type: FieldType.string, values: [body] },
-                      { name: 'severity', type: FieldType.string, values: [severity] },
-                      { name: 'id', type: FieldType.string, values: [id] },
-                      { name: 'labels', type: FieldType.other, values: [labelTags] },
-                    ],
-                  });
-                  tempFrame.meta = {
-                    type: DataFrameType.LogLines,
-                    preferredVisualisationType: 'logs',
-                    custom: { limit: 1000 },
-                  };
-                  subscriber.next({ data: [tempFrame] });
-                }
-              }
-            } catch (err) {
-              console.log('Failed to parse stream line', err);
-            }
-          }
-        }
-
-        if (isMetrics) {
-          flushMetricFrames();
-        } else if (totalLogs > 0 && totalLogs <= MAX_INITIAL) {
-          flushLogFrame();
-        }
-
+        subscriber.next({ data: allFrames });
         subscriber.complete();
       };
 
@@ -325,6 +85,255 @@ export class DataSource
         }
       });
     });
+  }
+
+  private async runSingleQuery(
+    target: MyQuery,
+    range: DataQueryRequest['range'],
+    signal: AbortSignal
+  ): Promise<DataFrame[]> {
+    const isMetrics = target.mode === 'metrics';
+    const filters: Filter[] = [...(target.filters ?? [])];
+    const groupBy: string[] = (target.groupBy ?? []).map(toInternalLabel);
+    const MAX_INITIAL = 1000;
+
+    if (isMetrics && target.metricName) {
+      filters.unshift({
+        tag: '_cardinalhq.name',
+        op: '=',
+        value: [target.metricName],
+      });
+    }
+
+    let nestedFilter = buildNestedFilter(filters);
+    if (!nestedFilter && !isMetrics) {
+      nestedFilter = {
+        k: '_cardinalhq.name',
+        v: [''],
+        op: 'has',
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      } as any;
+    }
+
+    const from = range?.from.valueOf();
+    const to = range?.to.valueOf();
+
+    const dataset = isMetrics ? 'metrics' : 'logs';
+    const expression: any = {
+      dataset,
+      returnResults: true,
+      filter: nestedFilter,
+      chart: {
+        aggregation: isMetrics ? 'max' : 'sum',
+        rollup: isMetrics ? 'max' : 'sum',
+        groupBys: groupBy,
+        type: isMetrics ? 'count' : 'rate',
+      },
+    };
+
+    if (isMetrics && target.metricType) {
+      expression.metricType = target.metricType;
+    }
+
+    const payload = {
+      baseExpressions: {
+        a: expression,
+      },
+    };
+
+    const response = await fetch(`/api/datasources/${this.id}/resources/proxy-stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: `/api/v1/graph?s=${from}&e=${to}`,
+        body: payload,
+      }),
+      signal,
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Streaming request failed for query ${target.refId}`);
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    const palette = [
+      '#7EB26D',
+      '#EAB839',
+      '#6ED0E0',
+      '#EF843C',
+      '#E24D42',
+      '#1F78C1',
+      '#BA43A9',
+      '#705DA0',
+      '#508642',
+      '#CCA300',
+      '#447EBC',
+      '#C15C17',
+    ];
+
+    const frameData: Record<string, { timestamps: number[]; values: number[] }> = {};
+    const timestamps: number[] = [];
+    const bodies: string[] = [];
+    const severities: string[] = [];
+    const ids: string[] = [];
+    const labelsArr: any[] = [];
+
+    let emitCount = 0;
+    let totalLogs = 0;
+    let buffer = '';
+    const frames: DataFrame[] = [];
+
+    const flushMetricFrames = () => {
+      for (const [label, series] of Object.entries(frameData)) {
+        let hash = 0;
+        const str = target.refId + '::' + label;
+        for (let i = 0; i < str.length; i++) {
+          hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        const colorIdx = Math.abs(hash) % palette.length;
+        const frame = toDataFrame({
+          refId: target.refId,
+          name: label,
+          fields: [
+            { name: 'Time', type: FieldType.time, values: series.timestamps },
+            {
+              name: 'Value',
+              type: FieldType.number,
+              values: series.values,
+              config: {
+                displayName: label,
+                color: {
+                  mode: 'fixed',
+                  fixedColor: palette[colorIdx],
+                },
+              },
+            },
+          ],
+        });
+
+        frame.meta = { preferredVisualisationType: 'graph' };
+        frames.push(frame);
+      }
+    };
+
+    const flushLogFrame = () => {
+      const frame = toDataFrame({
+        refId: target.refId,
+        name: 'logs',
+        fields: [
+          { name: 'timestamp', type: FieldType.time, values: timestamps },
+          { name: 'body', type: FieldType.string, values: bodies },
+          { name: 'severity', type: FieldType.string, values: severities },
+          { name: 'id', type: FieldType.string, values: ids },
+          { name: 'labels', type: FieldType.other, values: labelsArr },
+        ],
+      });
+      frame.meta = {
+        type: DataFrameType.LogLines,
+        preferredVisualisationType: 'logs',
+        custom: { limit: 1000 },
+      };
+      frames.push(frame);
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop()!;
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (!line.startsWith('data:')) {
+          continue;
+        }
+
+        try {
+          const parsed = JSON.parse(line.slice(5).trim());
+          const msg = parsed.message;
+          if (!msg) {
+            continue;
+          }
+
+          const isVolume = target.queryText === 'volume' || target.refId.startsWith('volume-');
+
+          if (isMetrics || isVolume) {
+            const ts = msg.timestamp;
+            const val = msg.value ?? 0;
+            const tags = msg.tags ?? {};
+
+            const labelParts: string[] = groupBy.map((key) => {
+              const prettyKey = key.replace(/^_cardinalhq\./, '');
+              return `${prettyKey}=${tags[key] ?? 'unknown'}`;
+            });
+
+            const label = labelParts.length
+              ? labelParts.join(', ')
+              : isMetrics
+              ? target.metricName ?? 'metric'
+              : 'log.events';
+
+            if (!frameData[label]) {
+              frameData[label] = { timestamps: [], values: [] };
+            }
+
+            frameData[label].timestamps.push(ts);
+            frameData[label].values.push(val);
+
+            emitCount++;
+          } else if (parsed.type === 'event') {
+            const ts = msg.timestamp;
+            const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
+            const severity = msg.tags?.['_cardinalhq.level'] || '';
+            const id = msg.tags?.['_cardinalhq.id'] || '';
+            const labelTags = msg.tags || {};
+
+            totalLogs++;
+
+            if (totalLogs <= MAX_INITIAL) {
+              timestamps.push(ts);
+              bodies.push(body);
+              severities.push(severity);
+              ids.push(id);
+              labelsArr.push(labelTags);
+            } else {
+              const frame = toDataFrame({
+                refId: target.refId,
+                name: 'logs',
+                fields: [
+                  { name: 'timestamp', type: FieldType.time, values: [ts] },
+                  { name: 'body', type: FieldType.string, values: [body] },
+                  { name: 'severity', type: FieldType.string, values: [severity] },
+                  { name: 'id', type: FieldType.string, values: [id] },
+                  { name: 'labels', type: FieldType.other, values: [labelTags] },
+                ],
+              });
+              frame.meta = {
+                type: DataFrameType.LogLines,
+                preferredVisualisationType: 'logs',
+                custom: { limit: 1000 },
+              };
+              frames.push(frame);
+            }
+          }
+        } catch (err) {}
+      }
+    }
+
+    if (isMetrics || target.queryText === 'volume') {
+      flushMetricFrames();
+    } else if (totalLogs > 0 && totalLogs <= MAX_INITIAL) {
+      flushLogFrame();
+    }
+
+    return frames;
   }
 
   async testDatasource() {
