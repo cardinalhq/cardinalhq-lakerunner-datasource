@@ -207,7 +207,7 @@ export async function fetchTagValues({
   }
 
   const body: Record<string, any> = {
-    mode,
+    dataset: mode,
     filter,
     limit: 1000,
     order: 'DESC',
