@@ -93,7 +93,11 @@ export class DataSource
     signal: AbortSignal
   ): Promise<DataFrame[]> {
     const isMetrics = target.mode === 'metrics';
-    const filters: Filter[] = [...(target.filters ?? [])];
+    const filters: Filter[] = (target.filters ?? []).filter((f) => {
+      const isKeyValid = f.tag?.trim();
+      const isValueValid = Array.isArray(f.value) && f.value.some((v) => v?.trim?.());
+      return isKeyValid && isValueValid;
+    });
     const groupBy: string[] = (target.groupBy ?? []).map(toInternalLabel);
     const MAX_INITIAL = 1000;
 
