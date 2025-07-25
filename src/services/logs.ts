@@ -25,7 +25,8 @@ async function streamJsonCollect(
   path: string,
   body: any,
   onData: (msg: any) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  setIsWaiting?: (isWaiting: boolean) => void
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const url = `/api/datasources/${datasourceId}/resources/proxy-stream`;
@@ -39,10 +40,21 @@ async function streamJsonCollect(
       onmessage(e) {
         try {
           const parsed = JSON.parse(e.data);
+          console.log(parsed);
+
+          if (parsed.type === 'waiting_scale_up') {
+            setIsWaiting?.(true);
+            return;
+          }
+
+          if (parsed.type === 'done') {
+            setIsWaiting?.(false);
+            resolve();
+            return;
+          }
+
           if (parsed.type === 'data' && parsed.message) {
             onData(parsed.message);
-          } else if (parsed.type === 'done') {
-            resolve();
           }
         } catch (err) {
           reject(err);
@@ -67,6 +79,7 @@ export async function fetchTagKeys({
   metricName,
   metricType,
   signal,
+  setIsWaiting,
 }: {
   datasourceId: number;
   mode?: 'logs' | 'metrics';
@@ -77,6 +90,7 @@ export async function fetchTagKeys({
   metricName?: string;
   metricType?: string;
   signal?: AbortSignal;
+  setIsWaiting?: (isWaiting: boolean) => void;
 }): Promise<string[]> {
   const keys = new Set<string>();
   const path = `/api/v1/tags/${mode}?s=${startTime}&e=${endTime}`;
@@ -157,7 +171,8 @@ export async function fetchTagKeys({
         });
       }
     },
-    signal
+    signal,
+    setIsWaiting
   );
 
   return Array.from(keys);
@@ -173,6 +188,7 @@ export async function fetchTagValues({
   signal,
   startTime,
   endTime,
+  setIsWaiting,
 }: {
   datasourceId: number;
   mode?: 'logs' | 'metrics';
@@ -184,6 +200,7 @@ export async function fetchTagValues({
   signal?: AbortSignal;
   startTime?: number;
   endTime?: number;
+  setIsWaiting?: (isWaiting: boolean) => void;
 }): Promise<string[]> {
   if (!labelName) {
     throw new Error('labelName is required');
@@ -264,7 +281,8 @@ export async function fetchTagValues({
         vals.add(String(value));
       }
     },
-    signal
+    signal,
+    setIsWaiting
   );
 
   return Array.from(vals);
@@ -275,11 +293,13 @@ export async function fetchMetricNames({
   startTime,
   endTime,
   signal,
+  setIsWaiting,
 }: {
   datasourceId: number;
   startTime?: number;
   endTime?: number;
   signal?: AbortSignal;
+  setIsWaiting?: (isWaiting: boolean) => void;
 }): Promise<Array<{ metricName: string; metricType: 'gauge' }>> {
   const metrics = new Set<string>();
   const path = `/api/v1/tags/metrics?s=${startTime}&e=${endTime}&tagName=_cardinalhq.name&dataType=string`;
@@ -294,7 +314,8 @@ export async function fetchMetricNames({
         metrics.add(name);
       }
     },
-    signal
+    signal,
+    setIsWaiting
   );
 
   return Array.from(metrics).map((metricName) => ({

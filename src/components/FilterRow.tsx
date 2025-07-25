@@ -23,6 +23,7 @@ interface FilterRowProps {
   metricType?: string;
   aggregation?: string;
   updateAggregation: (aggregation: Aggregation) => void;
+  setIsWaiting?: (isWaiting: boolean) => void;
 }
 
 export const FilterRow = ({
@@ -43,6 +44,7 @@ export const FilterRow = ({
   metricName,
   aggregation,
   updateAggregation,
+  setIsWaiting,
 }: FilterRowProps) => {
   const isMetricsMode = mode === 'metrics';
   const isLast = index === filters.length - 1;
@@ -73,6 +75,7 @@ export const FilterRow = ({
     metricType,
     startTime,
     endTime,
+    setIsWaiting,
   });
 
   const { data: groupByLabels = [], isLoading: loadingGroupByLabels } = useLogLabels({
@@ -84,6 +87,7 @@ export const FilterRow = ({
     endTime,
     metricName,
     metricType,
+    setIsWaiting,
   });
 
   const tagOptions = groupByLabels

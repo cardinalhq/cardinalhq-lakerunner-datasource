@@ -1,5 +1,5 @@
 import { QueryEditorProps } from '@grafana/data';
-import { Combobox, InlineField, InlineFieldRow, Tab, TabsBar } from '@grafana/ui';
+import { Combobox, InlineField, InlineFieldRow, Spinner, Tab, TabsBar } from '@grafana/ui';
 import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { DataSource } from '../datasource';
 import { Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
@@ -13,6 +13,7 @@ export function QueryEditor({
   datasource,
   range,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
+  const [isWaiting, setIsWaiting] = useState(false);
   const isMetricsMode = query.mode === 'metrics';
   const aggregation = query.aggregation ?? '';
   const updateAggregation = (agg: 'avg' | 'sum' | 'min' | 'max') => {
@@ -63,6 +64,7 @@ export function QueryEditor({
           startTime: timeRange.startTime,
           endTime: timeRange.endTime,
           signal: controller.signal,
+          setIsWaiting,
         });
         setMetricOptions(metrics);
         hasLoadedMetrics.current = true;
@@ -98,7 +100,26 @@ export function QueryEditor({
   };
 
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
+      {isWaiting && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(34, 37, 43, 0.6)',
+            zIndex: 10,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'all',
+            color: 'white',
+          }}
+        >
+          <Spinner />
+          <div style={{ marginTop: 8, fontWeight: 'bold' }}>Waiting for scale-up...</div>
+        </div>
+      )}
       <TabsBar>
         {['logs', 'metrics'].map((mode) => (
           <Tab
@@ -162,6 +183,7 @@ export function QueryEditor({
           metricType={query.metricType}
           aggregation={aggregation}
           updateAggregation={updateAggregation}
+          setIsWaiting={setIsWaiting}
         />
       ))}
     </div>

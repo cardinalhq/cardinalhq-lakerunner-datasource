@@ -145,9 +145,40 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 	for {
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
+			chunk := buf[:n]
+			var parsed map[string]interface{}
+			if jsonErr := json.Unmarshal(chunk, &parsed); jsonErr == nil {
+				if msgType, ok := parsed["type"].(string); ok {
+					switch msgType {
+					case "waiting_scale_up":
+						signal := map[string]string{"type": "waiting_scale_up"}
+						signalBytes, _ := json.Marshal(signal)
+						_ = sender.Send(&backend.CallResourceResponse{
+							Status: 200,
+							Body:   signalBytes,
+							Headers: map[string][]string{
+								"X-Event-Type": {"scale-up-waiting"},
+							},
+						})
+						continue
+					case "done":
+						signal := map[string]string{"type": "done"}
+						signalBytes, _ := json.Marshal(signal)
+						_ = sender.Send(&backend.CallResourceResponse{
+							Status: 200,
+							Body:   signalBytes,
+							Headers: map[string][]string{
+								"X-Event-Type": {"scale-up-done"},
+							},
+						})
+						continue
+					}
+				}
+			}
+
 			out := &backend.CallResourceResponse{
 				Status: resp.StatusCode,
-				Body:   append([]byte(nil), buf[:n]...), 
+				Body:   append([]byte(nil), chunk...), 
 			}
 			if first {
 				out.Headers = map[string][]string{

@@ -12,6 +12,7 @@ interface UseLabelsProps {
   metricType?: string;
   startTime?: number;
   endTime?: number;
+  setIsWaiting?: (v: boolean) => void;
 }
 
 export function useLogLabels({
@@ -23,6 +24,7 @@ export function useLogLabels({
   metricType,
   startTime = Date.now() - 3600_000,
   endTime = Date.now(),
+  setIsWaiting,
 }: UseLabelsProps) {
   const queryKey = [
     'labels',
@@ -48,7 +50,8 @@ export function useLogLabels({
         endTime,
         metricName,
         metricType,
-      });
+        setIsWaiting,
+      }),
     },
     enabled: shouldRun,
     staleTime: Infinity,
