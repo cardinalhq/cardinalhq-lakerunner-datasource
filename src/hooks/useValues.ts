@@ -28,13 +28,14 @@ export function useLabelValues({
 }: UseLabelValuesProps) {
   const isInternalMetricLabel = mode === 'metrics' && labelName === '_cardinalhq.name';
   const shouldRun = enabled && !!labelName && !isInternalMetricLabel && (mode !== 'metrics' || !!metricName);
+  const scopedFilters = filters.filter((f) => f.tag !== labelName);
 
   const queryKey = [
     'label-values',
     mode,
     labelName,
     metricName,
-    filters.map((f) => `${f.tag}:${f.op}:${f.value.join(',')}`).join('|'),
+    scopedFilters.map((f) => `${f.tag}:${f.op}:${f.value.join(',')}`).join('|'),
   ];
 
   const {
@@ -48,7 +49,7 @@ export function useLabelValues({
         datasourceId: datasource.id,
         mode,
         labelName,
-        filters,
+        filters: scopedFilters,
         useRelativeTime: true,
         signal,
         metricName,

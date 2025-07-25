@@ -37,8 +37,8 @@ export function useLogLabels({
 
   const { data = [], isLoading } = useQuery<string[], Error>({
     queryKey,
-    queryFn: ({ signal }) =>
-      fetchTagKeys({
+    queryFn: ({ signal }) => {
+      return fetchTagKeys({
         datasourceId: datasource.id,
         useRelativeTime: true,
         filters,
@@ -48,7 +48,8 @@ export function useLogLabels({
         endTime,
         metricName,
         metricType,
-      }),
+      });
+    },
     enabled: shouldRun,
     staleTime: Infinity,
     refetchOnMount: false,

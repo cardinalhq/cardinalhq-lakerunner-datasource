@@ -107,7 +107,7 @@ export const FilterRow = ({
               const isMessage = selected === 'message';
               updateFilter(index, {
                 tag: selected,
-                op: isMessage ? 'contains' : filter.op ?? '=',
+                op: isMessage ? 'contains' : '=',
                 value: [''],
               });
             }}
@@ -147,7 +147,7 @@ export const FilterRow = ({
             <div style={!filter.tag ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
               <Combobox
                 options={valueOptions}
-                value={filter.value?.[0]}
+                value={filter.value?.[0] ?? ''}
                 onChange={(v) => {
                   const val = v?.value ?? '';
                   if (val !== '__loading') {
