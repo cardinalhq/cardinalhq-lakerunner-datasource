@@ -72,3 +72,8 @@ export function apiFetchEventSourceWrapper(
 
   return controller ?? new AbortController();
 }
+
+export function truncateTo1Min(epochMillis: number) {
+  const ONE_MINUTE_MS = 1 * 60 * 1000;
+  return Math.floor(epochMillis / ONE_MINUTE_MS) * ONE_MINUTE_MS;
+}

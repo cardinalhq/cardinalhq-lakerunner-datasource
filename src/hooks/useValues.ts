@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchTagValues } from 'services/logs';
-import type { Filter } from '../types';
 import type { DataSource } from '../datasource';
+import type { Filter } from '../types';
+import { truncateTo1Min } from 'util/QueryUtils';
 
 interface UseLabelValuesProps {
   datasource: DataSource;
@@ -37,7 +38,12 @@ export function useLabelValues({
     mode,
     labelName,
     metricName,
-    scopedFilters.map((f) => `${f.tag}:${f.op}:${f.value.join(',')}`).join('|'),
+    scopedFilters
+      .sort((a, b) => a.tag.localeCompare(b.tag))
+      .map((f) => `${f.tag}:${f.op}:${f.value.join(',')}`)
+      .join('|'),
+    truncateTo1Min(startTime),
+    truncateTo1Min(endTime),
   ];
 
   const {

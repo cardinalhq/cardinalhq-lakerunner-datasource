@@ -1,10 +1,10 @@
 import { QueryEditorProps } from '@grafana/data';
 import { Combobox, InlineField, InlineFieldRow, Spinner, Tab, TabsBar } from '@grafana/ui';
-import React, { useMemo, useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DataSource } from '../datasource';
+import { fetchMetricNames } from '../services/logs';
 import { Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
 import { FilterRow } from './FilterRow';
-import { fetchMetricNames } from '../services/logs';
 
 export function QueryEditor({
   query,

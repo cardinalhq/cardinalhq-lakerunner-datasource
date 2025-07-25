@@ -40,8 +40,6 @@ async function streamJsonCollect(
       onmessage(e) {
         try {
           const parsed = JSON.parse(e.data);
-          console.log(parsed);
-
           if (parsed.type === 'waiting_scale_up') {
             setIsWaiting?.(true);
             return;

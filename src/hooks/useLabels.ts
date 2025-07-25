@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchTagKeys } from 'services/logs';
-import type { Filter } from '../types';
+import { truncateTo1Min } from 'util/QueryUtils';
 import type { DataSource } from '../datasource';
+import type { Filter } from '../types';
 
 interface UseLabelsProps {
   datasource: DataSource;
@@ -15,7 +16,7 @@ interface UseLabelsProps {
   setIsWaiting?: (v: boolean) => void;
 }
 
-export function useLogLabels({
+export function useLabels({
   datasource,
   enabled,
   filters = [],
@@ -29,8 +30,8 @@ export function useLogLabels({
   const queryKey = [
     'labels',
     mode,
-    String(startTime),
-    String(endTime),
+    truncateTo1Min(startTime),
+    truncateTo1Min(endTime),
     JSON.stringify(filters),
     metricName,
     metricType,
@@ -54,7 +55,7 @@ export function useLogLabels({
       });
     },
     enabled: shouldRun,
-    staleTime: Infinity,
+    staleTime: 5 * 60 * 1000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

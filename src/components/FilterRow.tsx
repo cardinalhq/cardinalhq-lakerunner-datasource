@@ -1,9 +1,9 @@
-import React, { useMemo } from 'react';
-import { InlineFieldRow, InlineField, Combobox, IconButton, Button, Input, MultiSelect } from '@grafana/ui';
-import { AGGREGATE_OPTIONS, Aggregation, Filter, Operator, OPERATOR_OPTIONS, TEXT_OPERATORS } from '../types';
-import { useLabelValues } from '../hooks/useValues';
-import { useLogLabels } from '../hooks/useLabels';
+import { Button, Combobox, IconButton, InlineField, InlineFieldRow, Input, MultiSelect } from '@grafana/ui';
 import type { DataSource } from 'datasource';
+import React, { useMemo } from 'react';
+import { useLabels } from '../hooks/useLabels';
+import { useLabelValues } from '../hooks/useValues';
+import { AGGREGATE_OPTIONS, Aggregation, Filter, Operator, OPERATOR_OPTIONS, TEXT_OPERATORS } from '../types';
 
 interface FilterRowProps {
   datasource: DataSource;
@@ -60,10 +60,6 @@ export const FilterRow = ({
   }, [filters, filter, index, hasValidTagAndValue]);
 
   const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName);
-  const isInitial = filters.length === 1 && !filters[0].tag;
-  const hasAnyScopedFilters = filters.slice(0, index).some((f) => !!f.tag?.trim() && !!f.value?.[0]?.trim());
-
-  const shouldRunLabels = isLast && (isInitial || hasAnyScopedFilters || hasValidTagAndValue);
 
   const { data: values = [], isLoading: loadingValues } = useLabelValues({
     datasource,
@@ -78,10 +74,10 @@ export const FilterRow = ({
     setIsWaiting,
   });
 
-  const { data: groupByLabels = [], isLoading: loadingGroupByLabels } = useLogLabels({
+  const { data: groupByLabels = [], isLoading: loadingGroupByLabels } = useLabels({
     datasource,
     filters: scopedFilters,
-    enabled: shouldRunLabels,
+    enabled: !isMetricsMode || !!metricName,
     mode,
     startTime,
     endTime,
@@ -200,7 +196,6 @@ export const FilterRow = ({
                 const selected = v.map((item) => item.value).filter((val): val is string => Boolean(val));
                 updateGroupBy(selected);
               }}
-              width={30}
             />
           </InlineField>
 
@@ -213,7 +208,6 @@ export const FilterRow = ({
                 const selected = (v?.value ?? '') as Aggregation;
                 updateAggregation(selected);
               }}
-              width={24}
             />
           </InlineField>
         </InlineFieldRow>
