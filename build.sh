@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Exit immediately if a command exits with a non-zero status
+set -e
+
+rm -rf dist
+rm -rf cardinalhq-lakerunner-datasource
+rm -rf cardinalhq-lakerunner-datasource*.zip
+
+npm run build
+mage
+
+mv dist cardinalhq-lakerunner-datasource
+zip -r cardinalhq-lakerunner-datasource.zip cardinalhq-lakerunner-datasource
+
+rm -rf cardinalhq-lakerunner-datasource
