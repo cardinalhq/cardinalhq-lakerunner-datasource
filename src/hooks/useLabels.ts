@@ -51,7 +51,7 @@ export function useLogLabels({
         metricName,
         metricType,
         setIsWaiting,
-      }),
+      });
     },
     enabled: shouldRun,
     staleTime: Infinity,
