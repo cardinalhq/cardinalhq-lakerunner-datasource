@@ -92,6 +92,8 @@ export class DataSource
     range: DataQueryRequest['range'],
     signal: AbortSignal
   ): Promise<DataFrame[]> {
+    const isLogVolumeQuery = target.queryText === 'volume';
+
     const isMetrics = target.mode === 'metrics';
     const filters: Filter[] = (target.filters ?? []).filter((f) => {
       const isKeyValid = f.tag?.trim();
@@ -141,17 +143,28 @@ export class DataSource
       expression.metricType = target.metricType;
     }
 
+    if (!isLogVolumeQuery && !isMetrics) {
+      delete expression.chart;
+    }
+
     const payload = {
       baseExpressions: {
         a: expression,
       },
     };
 
+    const urlParams = new URLSearchParams();
+    urlParams.set('s', String(from));
+    urlParams.set('e', String(to));
+    if (isLogVolumeQuery) {
+      urlParams.set('timeseriesOnly', 'true');
+    }
+
     const response = await fetch(`/api/datasources/${this.id}/resources/proxy-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        path: `/api/v1/graph?s=${from}&e=${to}`,
+        path: `/api/v1/graph?${urlParams.toString()}`,
         body: payload,
       }),
       signal,
