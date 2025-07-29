@@ -76,9 +76,12 @@ export function QueryEditor({
     return () => controller.abort();
   }, [datasource.id, isMetricsMode, timeRange.startTime, timeRange.endTime]);
 
-  const comboboxOptions = metricOptions
-    .map((m) => ({ label: m.metricName, value: m.metricName }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const comboboxOptions =
+    isWaiting || metricOptions.length === 0
+      ? [{ label: 'Loading...', value: '__loading' }]
+      : metricOptions
+          .map((m) => ({ label: m.metricName, value: m.metricName }))
+          .sort((a, b) => a.label.localeCompare(b.label));
 
   const selectedValue = query.metricName ?? '';
 
@@ -148,6 +151,9 @@ export function QueryEditor({
               options={comboboxOptions}
               value={selectedValue}
               onChange={(v) => {
+                if (v?.value === '__loading') {
+                  return;
+                }
                 const selected = metricOptions.find((opt) => opt.metricName === v?.value);
                 if (selected) {
                   onChange({

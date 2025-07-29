@@ -85,14 +85,18 @@ export const FilterRow = ({
     metricType,
     setIsWaiting,
   });
-
-  const tagOptions = groupByLabels
-    .filter((l: string) => l !== '_cardinalhq.name')
-    .map((l: string) => ({ label: l, value: l }))
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const tagOptions =
+    loadingGroupByLabels || groupByLabels.length === 0
+      ? [{ label: 'Loading...', value: '__loading' }]
+      : groupByLabels
+          .filter((l: string) => l !== '_cardinalhq.name')
+          .map((l: string) => ({ label: l, value: l }))
+          .sort((a, b) => a.label.localeCompare(b.label));
 
   const valueOptions = loadingValues
     ? [{ label: 'Loading...', value: '__loading' }]
+    : values.length === 0
+    ? [{ label: 'No values', value: '__none' }]
     : values.map((v: string) => ({ label: v, value: v })).sort((a, b) => a.label.localeCompare(b.label));
 
   return (
@@ -104,6 +108,9 @@ export const FilterRow = ({
             value={filter.tag}
             onChange={(v) => {
               const selected = v?.value ?? '';
+              if (selected === '__loading') {
+                return;
+              }
               const isMessage = selected === 'message';
               updateFilter(index, {
                 tag: selected,
@@ -150,7 +157,7 @@ export const FilterRow = ({
                 value={filter.value?.[0] ?? ''}
                 onChange={(v) => {
                   const val = v?.value ?? '';
-                  if (val !== '__loading') {
+                  if (val !== '__loading' && val !== '__none') {
                     updateFilter(index, { value: [val] });
                   }
                 }}
@@ -193,7 +200,9 @@ export const FilterRow = ({
               options={tagOptions}
               value={groupBy}
               onChange={(v) => {
-                const selected = v.map((item) => item.value).filter((val): val is string => Boolean(val));
+                const selected = v
+                  .map((item) => item.value)
+                  .filter((val): val is string => Boolean(val && val !== '__loading'));
                 updateGroupBy(selected);
               }}
             />
