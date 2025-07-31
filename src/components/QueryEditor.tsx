@@ -1,10 +1,24 @@
 import { QueryEditorProps } from '@grafana/data';
-import { Combobox, InlineField, InlineFieldRow, Spinner, Tab, TabsBar } from '@grafana/ui';
+import { Collapse, Combobox, Icon, InlineField, InlineFieldRow, LinkButton, Spinner, Tab, TabsBar } from '@grafana/ui';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DataSource } from '../datasource';
 import { fetchMetricNames } from '../services/logs';
 import { Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
 import { FilterRow } from './FilterRow';
+import { useLogBodies } from '../hooks/useLogBodies';
+import { SelectedLogModal } from './SelectedLogModal';
+import { css } from '@emotion/css';
+
+function areFiltersEqual(a: Filter[], b: Filter[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  const normalize = (f: Filter) => `${f.tag}|${f.op}|${(f.value ?? []).join(',')}`;
+  const sortedA = [...a].map(normalize).sort();
+  const sortedB = [...b].map(normalize).sort();
+
+  return sortedA.every((v, i) => v === sortedB[i]);
+}
 
 export function QueryEditor({
   query,
@@ -14,6 +28,12 @@ export function QueryEditor({
   range,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
   const [isWaiting, setIsWaiting] = useState(false);
+  const [selectedExemplar, setSelectedExemplar] = useState<string | null>(query.selectedExemplar ?? null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTimeRange, setModalTimeRange] = useState<{ startTime: number; endTime: number } | null>(null);
+  const [isCollapseOpen, setIsCollapseOpen] = useState(!!query.selectedExemplar);
+  const previousFiltersRef = useRef<Filter[]>([]);
+
   const isMetricsMode = query.mode === 'metrics';
   const aggregation = query.aggregation ?? '';
   const updateAggregation = (agg: 'avg' | 'sum' | 'min' | 'max') => {
@@ -28,6 +48,13 @@ export function QueryEditor({
     startTime: query.timeFrom ?? range?.from?.valueOf(),
     endTime: query.timeTo ?? range?.to?.valueOf(),
   });
+  useEffect(() => {
+    if (!areFiltersEqual(previousFiltersRef.current, filters)) {
+      previousFiltersRef.current = filters;
+      setSelectedExemplar(null);
+      onChange({ ...query, selectedExemplar: null });
+    }
+  }, [filters, onChange, query]);
 
   useEffect(() => {
     if (query.timeFrom || query.timeTo) {
@@ -101,6 +128,8 @@ export function QueryEditor({
     updated.splice(index, 1);
     onChange({ ...query, filters: updated });
   };
+  const cacheVersion = datasource.getLogCacheVersion(query.refId);
+  const { bodies, isLoading: bodiesLoading } = useLogBodies(datasource, query.refId, cacheVersion);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -192,6 +221,74 @@ export function QueryEditor({
           setIsWaiting={setIsWaiting}
         />
       ))}
+      <Collapse
+        label={
+          <div className={css({ display: 'flex', alignItems: 'center', gap: 8 })}>
+            <Icon name={isCollapseOpen ? 'angle-down' : 'angle-right'} />
+            <span>Extract tags from message</span>
+          </div>
+        }
+        isOpen={isCollapseOpen}
+        onToggle={() => setIsCollapseOpen((prev) => !prev)}
+      >
+        <InlineFieldRow>
+          <InlineField label="Select Message">
+            <Combobox
+              loading={bodiesLoading}
+              options={bodies.map((b) => ({ label: b, value: b }))}
+              value={query.selectedExemplar ?? ''}
+              onChange={(v) => {
+                setSelectedExemplar(v.value);
+                onChange({ ...query, selectedExemplar: v.value });
+                setIsCollapseOpen(true);
+              }}
+              width={60}
+            />
+          </InlineField>
+          {selectedExemplar && (
+            <InlineField>
+              <LinkButton
+                variant="secondary"
+                onClick={() => {
+                  setModalTimeRange({
+                    startTime: timeRange.startTime ?? Date.now() - 5 * 60 * 1000,
+                    endTime: timeRange.endTime ?? Date.now(),
+                  });
+                  setIsModalOpen(true);
+                }}
+                style={{ marginLeft: 8 }}
+              >
+                Extract tags
+              </LinkButton>
+            </InlineField>
+          )}
+        </InlineFieldRow>
+      </Collapse>
+
+      <SelectedLogModal
+        logLine={selectedExemplar!}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        filters={query.filters || []}
+        extractor={query.extractor}
+        timeRange={{
+          startTime: modalTimeRange?.startTime ?? 0,
+          endTime: modalTimeRange?.endTime ?? 0,
+        }}
+        datasourceId={datasource.id}
+        onExtractionApply={(newExtractor) => {
+          onChange({
+            ...query,
+            extractor: {
+              ...newExtractor,
+              selections: newExtractor.selections,
+              regex: newExtractor.regex,
+              fields: newExtractor.fields,
+            },
+          });
+          onRunQuery();
+        }}
+      />
     </div>
   );
 }

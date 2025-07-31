@@ -20,8 +20,36 @@ export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
   implements DataSourceWithSupplementaryQueriesSupport<MyQuery>
 {
+  private logBodyCache: Record<string, Set<string>> = {};
+  private cacheVersion: Record<string, number> = {};
+  private previousFilters: Record<string, Filter[]> = {};
+
+  private areFiltersEqual(a: Filter[], b: Filter[]): boolean {
+    if (a.length !== b.length) {
+      return false;
+    }
+
+    const normalize = (f: Filter) => `${f.tag}|${f.op}|${(f.value ?? []).join(',')}`;
+    const sortedA = [...a].map(normalize).sort();
+    const sortedB = [...b].map(normalize).sort();
+
+    return sortedA.every((v, i) => v === sortedB[i]);
+  }
+
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
     super(instanceSettings);
+  }
+  public getCachedLogBodies(refId: string): string[] {
+    const set = this.logBodyCache[refId] || new Set<string>();
+    return Array.from(set);
+  }
+
+  public getLogCacheVersion(refId: string): number {
+    return this.cacheVersion[refId] || 0;
+  }
+  public resetLogBodyCache(refId: string): void {
+    delete this.logBodyCache[refId];
+    delete this.cacheVersion[refId];
   }
   getSupportedSupplementaryQueryTypes(): SupplementaryQueryType[] {
     return [SupplementaryQueryType.LogsVolume, SupplementaryQueryType.LogsSample];
@@ -92,14 +120,22 @@ export class DataSource
     range: DataQueryRequest['range'],
     signal: AbortSignal
   ): Promise<DataFrame[]> {
+    this.resetLogBodyCache(target.refId);
     const isLogVolumeQuery = target.queryText === 'volume';
 
     const isMetrics = target.mode === 'metrics';
-    const filters: Filter[] = (target.filters ?? []).filter((f) => {
+    const rawFilters: Filter[] = target.filters ?? [];
+    const filters: Filter[] = rawFilters.filter((f) => {
       const isKeyValid = f.tag?.trim();
       const isValueValid = Array.isArray(f.value) && f.value.some((v) => v?.trim?.());
       return isKeyValid && isValueValid;
     });
+    const prev = this.previousFilters[target.refId] ?? [];
+    const filtersChanged = !this.areFiltersEqual(prev, filters);
+    if (filtersChanged) {
+      target.extractor = undefined;
+    }
+    this.previousFilters[target.refId] = filters;
     const groupBy: string[] = (target.groupBy ?? []).map(toInternalLabel);
     const MAX_INITIAL = 1000;
 
@@ -111,7 +147,25 @@ export class DataSource
       });
     }
 
-    let nestedFilter = buildNestedFilter(filters);
+    let allFilters = [...filters];
+
+    if (target.extractor?.selections?.length) {
+      const extractedFilters: Filter[] = target.extractor.selections
+        .filter((sel) => sel.label && sel.userSelected)
+        .map((sel) => ({
+          tag: sel.label,
+          op: 'has',
+          value: [''],
+          dataType: sel.dataType,
+          extracted: true,
+          computed: false,
+        }));
+
+      allFilters = [...allFilters, ...extractedFilters];
+    }
+
+    let nestedFilter = buildNestedFilter(allFilters);
+
     if (!nestedFilter && !isMetrics) {
       nestedFilter = {
         k: '_cardinalhq.name',
@@ -138,6 +192,15 @@ export class DataSource
         type: isMetrics ? 'count' : 'rate',
       },
     };
+    if (target.extractor && Array.isArray(target.extractor.selections) && Array.isArray(target.extractor.fields)) {
+      expression.extract = {
+        regex: target.extractor.regex,
+        fields: target.extractor.selections.map((sel, i) => ({
+          name: target.extractor!.fields[i] || `var_${i + 1}`,
+          type: sel.dataType,
+        })),
+      };
+    }
 
     if (isMetrics && target.metricType) {
       expression.metricType = target.metricType;
@@ -310,7 +373,28 @@ export class DataSource
             const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
             const severity = msg.tags?.['_cardinalhq.level'] || '';
             const id = msg.tags?.['_cardinalhq.id'] || '';
-            const labelTags = msg.tags || {};
+            const rawTags = msg.tags || {};
+
+            const labelTags: Record<string, any> = {};
+
+            if (rawTags['_cardinalhq.message']) {
+              labelTags['message'] = rawTags['_cardinalhq.message'];
+            }
+            if (rawTags['_cardinalhq.level']) {
+              labelTags['level'] = rawTags['_cardinalhq.level'];
+            }
+            for (const [k, v] of Object.entries(rawTags)) {
+              if (!k.startsWith('_cardinalhq.') && !k.startsWith('nlp')) {
+                labelTags[k] = v;
+              }
+            }
+
+            if (!this.logBodyCache[target.refId]) {
+              this.logBodyCache[target.refId] = new Set<string>();
+              this.cacheVersion[target.refId] = 0;
+            }
+            this.logBodyCache[target.refId].add(body);
+            this.cacheVersion[target.refId]++;
 
             totalLogs++;
 
@@ -337,6 +421,7 @@ export class DataSource
                 preferredVisualisationType: 'logs',
                 custom: { limit: 1000 },
               };
+
               frames.push(frame);
             }
           }

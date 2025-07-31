@@ -1,0 +1,295 @@
+.bg-rg-result {
+  background-color: var(--bs-gray-200);
+}
+
+#rg_loading {
+  z-index: 1035;
+}
+
+#rg_loading > div {
+  background-color: var(--bs-gray-800)!important;
+  margin-left: auto!important;
+  margin-right: auto!important;
+}
+
+.rg-hidden {
+  display: none;
+}
+
+.rg-faded {
+  opacity: 0.7;
+}
+
+h1, h2, h3, h4, h5, h6, label, small {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+h5 i {
+  margin-left: 0.4em;
+  display: inline-block;
+  transition-property: transform;
+  transition-duration: 0.2s;
+}
+
+.rg-upside-down i {
+  transform: rotate(180deg);
+}
+
+.rg-banner-consent .btn {
+  height: 2.3em;
+}
+
+.rg-text-display {
+  white-space: pre;
+}
+
+.rg-code,
+.rg-match-container,
+.rg-regex-container {
+  font-family: Consolas, monospace;
+}
+
+.rg-code-accordion pre[class*=language-]>code {
+  box-shadow: none;
+}
+
+.rg-code-accordion pre[class*=language-]::before, .rg-code-accordion pre[class*=language-]::after {
+  display: none;
+}
+
+.rg-match-container,
+.rg-regex-container {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.rg-match-container {
+  user-select: none;
+}
+
+.rg-regex-container {
+  user-select: all;
+}
+
+.rg-match-row {
+  position: relative;
+  height: 0.7rem;
+  white-space: nowrap;
+}
+
+.rg-match-item {
+  position: absolute;
+  height: 0.7rem;
+  cursor: pointer;
+}
+
+.rg-multi-match-item {
+  cursor: url('../images/cursor-rg-match-item-16.png') 8 10, auto !important;
+}
+
+.rg-match-item-red {
+  background-color: #da6772;
+  border: 1px solid #dc3545;
+}
+
+.rg-match-item-blue {
+  background-color: #4da3ff;
+  border: 1px solid #007bff;
+}
+
+.rg-match-item-green {
+  background-color: #5dbb73;
+  border: 1px solid #28a745;
+}
+
+.rg-match-item-yellow {
+  background-color: #ffda6a;
+  border: 1px solid #ffc107;
+}
+
+.rg-recognizer:hover {
+  text-decoration: underline;
+  background-color: rgba(255,255,255,0.2);
+}
+
+.rg-match-item-stripe/*, .rg-match-item-stripe .rg-recognizer*/ {
+  background: repeating-linear-gradient(-45deg, transparent, transparent 6px, rgba(200, 200, 200, 0.2) 6px, rgba(200, 200, 200, 0.2) 8px);
+}
+
+.rg-match-item-overlay {
+  z-index: 2;
+  display: none;
+  top: 0.69em;
+  position: relative;
+  width: max-content;
+  padding: 0.2em;
+  background-color: inherit;
+  cursor: pointer;
+}
+
+.rg-glow {
+  box-shadow: 0px 0px 40px 4px rgba(8,8,7,1);
+}
+
+.rg-glow-alert {
+  box-shadow: inherit;
+
+  animation: blink 0.3s;
+  animation-iteration-count: 3;
+}
+
+@keyframes blink {
+  50% {
+    box-shadow: 0px 0px 40px 4px rgba(8,8,7,1);
+  }
+}
+
+.rg-match-item:hover .rg-match-item-overlay {
+  display: block;
+}
+
+.rg-match-item.rg-item-selected:hover .rg-match-item-overlay,
+.rg-match-item.rg-item-not-available:hover .rg-match-item-overlay {
+  display: none;
+}
+
+.rg-match-item-overlay a {
+  display: block;
+}
+
+.rg-char-selected {
+  background: lightgray !important;
+}
+
+.rg-item-selected {
+  background: none;
+  background-color: white !important;
+  border: 1px solid gray;
+  cursor: url('../images/cursor-rg-match-selection-delete-32.png'), auto !important;
+}
+
+.rg-item-not-available {
+  background: none;
+  background-color: lightgray !important;
+  border: none;
+  cursor: not-allowed;
+}
+
+.rg-result-part:hover {
+    background-color: lightgray;
+}
+
+.rg-check-box {
+  padding-left: 1.5em;
+}
+
+.rg-check-box .form-check {
+  padding-left: 0;
+}
+
+.rg-check-box .form-check .form-check-input {
+  margin-left: -1.5em;
+}
+
+.rg-help-popover {
+  border-color: var(--bs-purple);
+}
+
+.rg-help-popover .popover-header {
+  background-color: var(--bs-purple);
+  color: var(--bs-white);
+}
+
+.rg-help-popover p:last-of-type, .rg-help-popover ul {
+  margin-bottom: 0;
+}
+
+.rg-help-popover a {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-decoration: none;
+}
+
+.rg-capturing-group {
+  background-color: var(--bs-white);
+}
+
+.rg-cap-group-unnamed {
+  font-style: italic;
+}
+
+.rg-code-accordion .accordion-button {
+  padding: 0.6em;
+}
+
+.rg-code-accordion .accordion-button {
+  box-shadow: none;
+}
+
+.rg-code-accordion .accordion-button:not(.collapsed) {
+  background-color: #f4f8ff;
+}
+
+.rg-code-accordion pre {
+  margin: 0;
+  background-color: white;
+}
+
+#rg_result_display, #rg_cap_group_display {
+  white-space: pre-wrap;
+}
+
+.rg-share-link {
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+footer a.rounded {
+  display: inline-block;
+  padding: 0.2em;
+  margin: -0.07em 0;
+}
+
+footer a.rounded:hover {
+  background-color: #1b1b1b;
+}
+
+
+
+/* Driver things */
+
+.rg-guide#driver-popover-item > .driver-popover-title {
+  font: inherit;
+  font-size: 14pt;
+  font-weight: 700;
+}
+
+
+.rg-guide#driver-popover-item > .driver-popover-description {
+  font: inherit;
+  font-size: 11pt;
+}
+
+.rg-guide#driver-popover-item .driver-popover-footer button {
+  font: inherit;
+  font-size: 10pt;
+  border-radius: 5px;
+  padding: 7px 10px;
+  background-color: #6c757d;
+  color: #F8F9FA;
+  text-shadow: none;
+  border: none;
+}
+
+.rg-guide#driver-popover-item .driver-popover-footer button.driver-next-btn {
+  background-color: #007bff;
+}
+
+.rg-guide#driver-popover-item .driver-popover-footer button.driver-disabled {
+  color: #F8F9FA;
+  opacity: .65;
+}
+

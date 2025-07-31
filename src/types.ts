@@ -23,13 +23,15 @@ export const AGGREGATE_OPTIONS = [
 export type Aggregation = 'avg' | 'sum' | 'min' | 'max';
 
 export const TEXT_OPERATORS: Operator[] = ['contains', 'not contains', 'regex', 'not regex'];
-
 export const MULTIVALUE_OPERATORS: Operator[] = ['in', 'not_in'];
 
 export interface Filter {
   tag: string;
   op: Operator;
   value: string[];
+  dataType?: 'string' | 'number';
+  extracted?: boolean;
+  computed?: boolean;
 }
 
 export interface MyQuery extends DataQuery {
@@ -43,6 +45,18 @@ export interface MyQuery extends DataQuery {
   timeFrom?: number;
   timeTo?: number;
   aggregation?: Aggregation;
+  selectedExemplar?: string | null;
+  extractor?: {
+    regex: string;
+    fields: string[];
+    selections: Array<{
+      index: number;
+      recognizerName: string;
+      dataType: 'string' | 'number';
+      label: string;
+      userSelected: boolean;
+    }>;
+  };
 }
 
 export const DEFAULT_QUERY: Partial<MyQuery> = {
@@ -74,6 +88,7 @@ export interface ExploreQuery {
     chart?: {
       groupBys?: string[];
     };
+    extractor?: MyQuery['extractor'];
   };
 }
 

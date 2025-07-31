@@ -32,6 +32,8 @@ export function buildNestedFilter(filters: Filter[]): any {
         return 'regex';
       case 'not regex':
         return 'not_regex';
+      case 'has':
+        return 'has';
       default:
         return 'eq';
     }
@@ -41,9 +43,9 @@ export function buildNestedFilter(filters: Filter[]): any {
     k: mapToInternalLabel(f.tag),
     v: f.value,
     op: convertOp(f.op),
-    dataType: 'string',
-    extracted: false,
-    computed: false,
+    dataType: f.dataType || 'string',
+    extracted: !!f.extracted,
+    computed: !!f.computed,
   });
 
   if (filters.length === 1) {
