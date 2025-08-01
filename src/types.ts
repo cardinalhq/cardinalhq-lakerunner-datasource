@@ -21,7 +21,7 @@ export const AGGREGATE_OPTIONS = [
   { label: 'Max', value: 'max' },
 ];
 export type Aggregation = 'avg' | 'sum' | 'min' | 'max';
-
+export type ChartAggregation = 'avg' | 'sum' | 'min' | 'max';
 export const TEXT_OPERATORS: Operator[] = ['contains', 'not contains', 'regex', 'not regex'];
 export const MULTIVALUE_OPERATORS: Operator[] = ['in', 'not_in'];
 
@@ -44,8 +44,10 @@ export interface MyQuery extends DataQuery {
   metricType?: 'gauge' | 'rate' | 'histogram';
   timeFrom?: number;
   timeTo?: number;
+  chartAggregation?: ChartAggregation;
   aggregation?: Aggregation;
   selectedExemplar?: string | null;
+  chartField?: string;
   extractor?: {
     regex: string;
     fields: string[];

@@ -132,8 +132,18 @@ export class DataSource
     });
     const prev = this.previousFilters[target.refId] ?? [];
     const filtersChanged = !this.areFiltersEqual(prev, filters);
-    if (filtersChanged) {
+    if (filtersChanged && !target.extractor?.selections?.length) {
       target.extractor = undefined;
+    }
+    const hasValidExtractor = !!target.extractor?.regex && Array.isArray(target.extractor?.fields);
+    const hasMetricName = !!target.metricName;
+    const hasFilters = filters.length > 0;
+
+    if (!isMetrics && !hasFilters && !hasValidExtractor) {
+      return [];
+    }
+    if (isMetrics && !hasMetricName) {
+      return [];
     }
     this.previousFilters[target.refId] = filters;
     const groupBy: string[] = (target.groupBy ?? []).map(toInternalLabel);
@@ -185,12 +195,12 @@ export class DataSource
       dataset,
       returnResults: true,
       filter: nestedFilter,
-      chart: {
-        aggregation: target.aggregation ?? (isMetrics ? 'max' : 'sum'),
-        rollup: target.aggregation ?? (isMetrics ? 'max' : 'sum'),
-        groupBys: groupBy,
-        type: isMetrics ? 'count' : 'rate',
-      },
+      // chart: {
+      //   aggregation: target.aggregation ?? (isMetrics ? 'max' : 'sum'),
+      //   rollup: target.aggregation ?? (isMetrics ? 'max' : 'sum'),
+      //   groupBys: groupBy,
+      //   type: isMetrics ? 'count' : 'rate',
+      // },
     };
     if (target.extractor && Array.isArray(target.extractor.selections) && Array.isArray(target.extractor.fields)) {
       expression.extract = {
@@ -206,8 +216,42 @@ export class DataSource
       expression.metricType = target.metricType;
     }
 
-    if (!isLogVolumeQuery && !isMetrics) {
-      delete expression.chart;
+    const hasExtractor = !!target.extractor?.regex && Array.isArray(target.extractor.fields);
+    const chartField = target.chartField;
+    const chartAggregation = target.chartAggregation ?? 'sum';
+    const normalAggregation = target.aggregation ?? 'sum';
+
+    const hasNumericChartField =
+      hasExtractor &&
+      chartField &&
+      target.extractor?.selections?.some((sel) => sel.label === chartField && sel.dataType === 'number');
+
+    if (isMetrics) {
+      expression.chart = {
+        aggregation: normalAggregation,
+        rollup: normalAggregation,
+        groupBys: groupBy,
+        type: 'count',
+      };
+    } else if (isLogVolumeQuery) {
+      expression.chart = {
+        aggregation: normalAggregation,
+        rollup: normalAggregation,
+        groupBys: groupBy,
+        type: 'rate',
+      };
+    } else if (hasNumericChartField) {
+      const selected = target.extractor!.selections.find(
+        (sel) => sel.label === chartField && sel.dataType === 'number'
+      );
+      expression.chart = {
+        aggregation: chartAggregation,
+        rollup: chartAggregation,
+        groupBys: groupBy,
+        type: 'count',
+        fieldName: chartField,
+        fieldType: selected?.dataType ?? 'number',
+      };
     }
 
     const payload = {
@@ -343,8 +387,19 @@ export class DataSource
           }
 
           const isVolume = target.queryText === 'volume' || target.refId.startsWith('volume-');
+          if (parsed.type === 'timeseries' && hasNumericChartField && !isMetrics && !isLogVolumeQuery) {
+            const value = msg.value;
+            const label = `${chartField}=extracted`;
 
-          if (isMetrics || isVolume) {
+            if (typeof value === 'number' && !isNaN(value)) {
+              if (!frameData[label]) {
+                frameData[label] = { timestamps: [], values: [] };
+              }
+              const ts = msg.timestamp;
+              frameData[label].timestamps.push(ts);
+              frameData[label].values.push(value);
+            }
+          } else if (isMetrics || isVolume) {
             const ts = msg.timestamp;
             const val = msg.value ?? 0;
             const tags = msg.tags ?? {};
@@ -431,8 +486,13 @@ export class DataSource
 
     if (isMetrics || target.queryText === 'volume') {
       flushMetricFrames();
-    } else if (totalLogs > 0 && totalLogs <= MAX_INITIAL) {
-      flushLogFrame();
+    } else {
+      if (Object.keys(frameData).length > 0) {
+        flushMetricFrames();
+      }
+      if (totalLogs > 0 && totalLogs <= MAX_INITIAL) {
+        flushLogFrame();
+      }
     }
 
     return frames;

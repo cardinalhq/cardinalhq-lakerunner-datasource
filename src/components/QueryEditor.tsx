@@ -3,7 +3,7 @@ import { Collapse, Combobox, Icon, InlineField, InlineFieldRow, LinkButton, Spin
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DataSource } from '../datasource';
 import { fetchMetricNames } from '../services/logs';
-import { Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
+import { AGGREGATE_OPTIONS, Aggregation, Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
 import { FilterRow } from './FilterRow';
 import { useLogBodies } from '../hooks/useLogBodies';
 import { SelectedLogModal } from './SelectedLogModal';
@@ -14,10 +14,10 @@ function areFiltersEqual(a: Filter[], b: Filter[]): boolean {
     return false;
   }
   const normalize = (f: Filter) => `${f.tag}|${f.op}|${(f.value ?? []).join(',')}`;
-  const sortedA = [...a].map(normalize).sort();
-  const sortedB = [...b].map(normalize).sort();
-
-  return sortedA.every((v, i) => v === sortedB[i]);
+  return [...a]
+    .map(normalize)
+    .sort()
+    .every((v, i) => v === [...b].map(normalize).sort()[i]);
 }
 
 export function QueryEditor({
@@ -33,12 +33,16 @@ export function QueryEditor({
   const [modalTimeRange, setModalTimeRange] = useState<{ startTime: number; endTime: number } | null>(null);
   const [isCollapseOpen, setIsCollapseOpen] = useState(!!query.selectedExemplar);
   const previousFiltersRef = useRef<Filter[]>([]);
+  const [chartField, setChartField] = useState<string | null>(query.chartField ?? null);
+  const [chartAggregation, setChartAggregation] = useState<Aggregation>(query.chartAggregation ?? 'sum');
+  const [aggregation, setAggregation] = useState<Aggregation>(query.aggregation ?? 'sum');
+  const [extractedNumericFields, setExtractedNumericFields] = useState<string[]>([]);
+  const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: 'gauge' }>>([]);
+  const hasLoadedMetrics = useRef(false);
+  const cacheVersion = datasource.getLogCacheVersion(query.refId);
+  const { bodies, isLoading: bodiesLoading } = useLogBodies(datasource, query.refId, cacheVersion);
 
   const isMetricsMode = query.mode === 'metrics';
-  const aggregation = query.aggregation ?? '';
-  const updateAggregation = (agg: 'avg' | 'sum' | 'min' | 'max') => {
-    onChange({ ...query, aggregation: agg });
-  };
   const filters: Filter[] = useMemo(() => {
     const remaining = query.filters?.filter((f) => f.tag !== '_cardinalhq.name') ?? [];
     return remaining.length > 0 ? remaining : [{ tag: '', op: '=' as Operator, value: [''] }];
@@ -48,88 +52,86 @@ export function QueryEditor({
     startTime: query.timeFrom ?? range?.from?.valueOf(),
     endTime: query.timeTo ?? range?.to?.valueOf(),
   });
+
   useEffect(() => {
-    if (!areFiltersEqual(previousFiltersRef.current, filters)) {
+    if (previousFiltersRef.current.length === 0 && filters.length > 0) {
       previousFiltersRef.current = filters;
-      setSelectedExemplar(null);
-      onChange({ ...query, selectedExemplar: null });
     }
-  }, [filters, onChange, query]);
+  }, [filters]);
 
   useEffect(() => {
-    if (query.timeFrom || query.timeTo) {
-      return;
-    }
+    const filtersChanged = !areFiltersEqual(previousFiltersRef.current, filters);
+    const exemplarStillPresent =
+      !!query.selectedExemplar && (bodies.includes(query.selectedExemplar) || bodies.length === 0);
 
-    if (range?.from && range?.to) {
+    if (filtersChanged) {
+      setSelectedExemplar(null);
+      setExtractedNumericFields([]);
+      setChartField(null);
+      onChange({ ...query, selectedExemplar: null, extractor: undefined, chartField: undefined });
+    } else if (query.selectedExemplar && exemplarStillPresent && selectedExemplar !== query.selectedExemplar) {
+      setSelectedExemplar(query.selectedExemplar);
+    }
+    previousFiltersRef.current = filters;
+  }, [filters, bodies, selectedExemplar, onChange, query]);
+
+  useEffect(() => {
+    if (!query.timeFrom && !query.timeTo && range?.from && range?.to) {
       setTimeRange((prev) => {
         const newStart = range.from.valueOf();
         const newEnd = range.to.valueOf();
-        const updated = {
+        return {
           startTime: Math.abs(newStart - (prev.startTime ?? 0)) > 1000 ? newStart : prev.startTime,
           endTime: Math.abs(newEnd - (prev.endTime ?? 0)) > 1000 ? newEnd : prev.endTime,
         };
-        return updated;
       });
     }
   }, [range?.from, range?.to, query.timeFrom, query.timeTo]);
-
-  const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: 'gauge' }>>([]);
-  const hasLoadedMetrics = useRef(false);
 
   useEffect(() => {
     if (!isMetricsMode || hasLoadedMetrics.current) {
       return;
     }
-
     const controller = new AbortController();
-
-    const loadMetrics = async () => {
-      try {
-        const metrics = await fetchMetricNames({
-          datasourceId: datasource.id,
-          startTime: timeRange.startTime,
-          endTime: timeRange.endTime,
-          signal: controller.signal,
-          setIsWaiting,
-        });
+    fetchMetricNames({
+      datasourceId: datasource.id,
+      startTime: timeRange.startTime,
+      endTime: timeRange.endTime,
+      signal: controller.signal,
+      setIsWaiting,
+    })
+      .then((metrics) => {
         setMetricOptions(metrics);
         hasLoadedMetrics.current = true;
-      } catch (err) {}
-    };
-
-    loadMetrics();
-
+      })
+      .catch(() => {});
     return () => controller.abort();
   }, [datasource.id, isMetricsMode, timeRange.startTime, timeRange.endTime]);
 
-  const comboboxOptions =
-    isWaiting || metricOptions.length === 0
-      ? [{ label: 'Loading...', value: '__loading' }]
-      : metricOptions
-          .map((m) => ({ label: m.metricName, value: m.metricName }))
-          .sort((a, b) => a.label.localeCompare(b.label));
+  useEffect(() => {
+    const selections = query.extractor?.selections ?? [];
+    const numericFields = selections
+      .filter((s) => s.dataType === 'number')
+      .map((s) => s.label)
+      .filter((v, i, self) => v && self.indexOf(v) === i);
+    setExtractedNumericFields(numericFields);
+    if (!query.chartField && numericFields.length > 0) {
+      setChartField(numericFields[0]);
+      onChange({ ...query, chartField: numericFields[0] });
+    }
+  }, [query.extractor, onChange, query.chartField, query]);
 
-  const selectedValue = query.metricName ?? '';
+  useEffect(() => {
+    if (aggregation !== query.aggregation) {
+      onChange({ ...query, aggregation });
+    }
+  }, [aggregation, onChange, query]);
 
-  const updateFilter = (index: number, patch: Partial<Filter>) => {
-    const updated = [...filters];
-    updated[index] = { ...updated[index], ...patch };
-    onChange({ ...query, filters: updated });
-  };
-
-  const addFilter = () => {
-    const updated = [...filters, { tag: '', op: '=' as Operator, value: [''] }];
-    onChange({ ...query, filters: updated });
-  };
-
-  const removeFilter = (index: number) => {
-    const updated = [...filters];
-    updated.splice(index, 1);
-    onChange({ ...query, filters: updated });
-  };
-  const cacheVersion = datasource.getLogCacheVersion(query.refId);
-  const { bodies, isLoading: bodiesLoading } = useLogBodies(datasource, query.refId, cacheVersion);
+  useEffect(() => {
+    if (chartAggregation !== query.chartAggregation) {
+      onChange({ ...query, chartAggregation });
+    }
+  }, [chartAggregation, onChange, query]);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -152,23 +154,23 @@ export function QueryEditor({
           <div style={{ marginTop: 8, fontWeight: 'bold' }}>Waiting for scale-up...</div>
         </div>
       )}
+
       <TabsBar>
         {['logs', 'metrics'].map((mode) => (
           <Tab
             key={mode}
             label={mode.charAt(0).toUpperCase() + mode.slice(1)}
             active={(query.mode ?? 'logs') === mode}
-            onChangeTab={() => {
-              const next = {
+            onChangeTab={() =>
+              onChange({
                 ...query,
                 mode: mode as 'logs' | 'metrics',
                 filters: [{ tag: '', op: '=' as Operator, value: [''] }],
                 groupBy: [],
                 metricName: undefined,
                 metricType: undefined,
-              };
-              onChange(next);
-            }}
+              })
+            }
           />
         ))}
       </TabsBar>
@@ -177,19 +179,12 @@ export function QueryEditor({
         <InlineFieldRow>
           <InlineField label="Metric Name">
             <Combobox
-              options={comboboxOptions}
-              value={selectedValue}
+              options={metricOptions.map((m) => ({ label: m.metricName, value: m.metricName }))}
+              value={query.metricName ?? ''}
               onChange={(v) => {
-                if (v?.value === '__loading') {
-                  return;
-                }
                 const selected = metricOptions.find((opt) => opt.metricName === v?.value);
                 if (selected) {
-                  onChange({
-                    ...query,
-                    metricName: selected.metricName,
-                    metricType: selected.metricType,
-                  });
+                  onChange({ ...query, metricName: selected.metricName, metricType: selected.metricType });
                 }
               }}
               width={40}
@@ -207,9 +202,17 @@ export function QueryEditor({
           filters={filters}
           startTime={timeRange.startTime}
           endTime={timeRange.endTime}
-          updateFilter={updateFilter}
-          removeFilter={removeFilter}
-          addFilter={addFilter}
+          updateFilter={(i, patch) => {
+            const updated = [...filters];
+            updated[i] = { ...updated[i], ...patch };
+            onChange({ ...query, filters: updated });
+          }}
+          removeFilter={(i) => {
+            const updated = [...filters];
+            updated.splice(i, 1);
+            onChange({ ...query, filters: updated });
+          }}
+          addFilter={() => onChange({ ...query, filters: [...filters, { tag: '', op: '=' as Operator, value: [''] }] })}
           updateGroupBy={(labels) => onChange({ ...query, groupBy: labels })}
           groupBy={query.groupBy ?? []}
           onRunQuery={onRunQuery}
@@ -217,75 +220,108 @@ export function QueryEditor({
           metricName={query.metricName}
           metricType={query.metricType}
           aggregation={aggregation}
-          updateAggregation={updateAggregation}
+          updateAggregation={setAggregation}
           setIsWaiting={setIsWaiting}
         />
       ))}
-      <Collapse
-        label={
-          <div className={css({ display: 'flex', alignItems: 'center', gap: 8 })}>
-            <Icon name={isCollapseOpen ? 'angle-down' : 'angle-right'} />
-            <span>Extract tags from message</span>
-          </div>
-        }
-        isOpen={isCollapseOpen}
-        onToggle={() => setIsCollapseOpen((prev) => !prev)}
-      >
-        <InlineFieldRow>
-          <InlineField label="Select Message">
-            <Combobox
-              loading={bodiesLoading}
-              options={bodies.map((b) => ({ label: b, value: b }))}
-              value={query.selectedExemplar ?? ''}
-              onChange={(v) => {
-                setSelectedExemplar(v.value);
-                onChange({ ...query, selectedExemplar: v.value });
-                setIsCollapseOpen(true);
-              }}
-              width={60}
-            />
-          </InlineField>
-          {selectedExemplar && (
-            <InlineField>
-              <LinkButton
-                variant="secondary"
-                onClick={() => {
-                  setModalTimeRange({
-                    startTime: timeRange.startTime ?? Date.now() - 5 * 60 * 1000,
-                    endTime: timeRange.endTime ?? Date.now(),
-                  });
-                  setIsModalOpen(true);
+      {!isMetricsMode && (
+        <Collapse
+          label={
+            <div className={css({ display: 'flex', alignItems: 'center', gap: 8 })}>
+              <Icon name={isCollapseOpen ? 'angle-down' : 'angle-right'} />
+              <span>Extract tags from message</span>
+            </div>
+          }
+          isOpen={isCollapseOpen}
+          onToggle={() => setIsCollapseOpen((prev) => !prev)}
+        >
+          <InlineFieldRow>
+            <InlineField label="Select Message">
+              <Combobox
+                loading={bodiesLoading}
+                options={bodies.map((b) => ({ label: b, value: b }))}
+                value={selectedExemplar ?? ''}
+                onChange={(v) => {
+                  setSelectedExemplar(v.value);
+                  onChange({ ...query, selectedExemplar: v.value });
+                  setIsCollapseOpen(true);
                 }}
-                style={{ marginLeft: 8 }}
-              >
-                Extract tags
-              </LinkButton>
+                width={60}
+              />
             </InlineField>
-          )}
-        </InlineFieldRow>
-      </Collapse>
+            {selectedExemplar && bodies.includes(selectedExemplar) && (
+              <InlineField>
+                <LinkButton
+                  variant="secondary"
+                  onClick={() => {
+                    setModalTimeRange({
+                      startTime: timeRange.startTime ?? Date.now() - 5 * 60 * 1000,
+                      endTime: timeRange.endTime ?? Date.now(),
+                    });
+                    setIsModalOpen(true);
+                  }}
+                  style={{ marginLeft: 8 }}
+                >
+                  Extract tags
+                </LinkButton>
+              </InlineField>
+            )}
+          </InlineFieldRow>
 
+          {extractedNumericFields.length > 0 && (
+            <InlineFieldRow style={{ marginTop: 8 }}>
+              <InlineField label="Chart">
+                <Combobox
+                  options={extractedNumericFields.map((f) => ({ label: f, value: f }))}
+                  value={chartField}
+                  onChange={(v) => {
+                    const field = v?.value ?? null;
+                    setChartField(field);
+                    onChange({ ...query, chartField: field });
+                  }}
+                  width={30}
+                />
+              </InlineField>
+              <InlineField label="Aggregation" style={{ marginLeft: 8 }}>
+                <Combobox
+                  options={AGGREGATE_OPTIONS}
+                  value={chartAggregation}
+                  onChange={(v) => setChartAggregation(v?.value as Aggregation)}
+                  width={20}
+                />
+              </InlineField>
+            </InlineFieldRow>
+          )}
+        </Collapse>
+      )}
       <SelectedLogModal
         logLine={selectedExemplar!}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         filters={query.filters || []}
         extractor={query.extractor}
-        timeRange={{
-          startTime: modalTimeRange?.startTime ?? 0,
-          endTime: modalTimeRange?.endTime ?? 0,
-        }}
+        timeRange={{ startTime: modalTimeRange?.startTime ?? 0, endTime: modalTimeRange?.endTime ?? 0 }}
         datasourceId={datasource.id}
         onExtractionApply={(newExtractor) => {
+          const numericFields = newExtractor.selections
+            .filter((s) => s.dataType === 'number')
+            .map((s) => s.label)
+            .filter((v, i, self) => v && self.indexOf(v) === i);
+          const defaultField = numericFields[0] ?? null;
+          setExtractedNumericFields(numericFields);
+          setChartField(defaultField);
+          setChartAggregation('sum');
           onChange({
             ...query,
+            chartField: defaultField,
+            chartAggregation: 'sum',
             extractor: {
-              ...newExtractor,
-              selections: newExtractor.selections,
               regex: newExtractor.regex,
               fields: newExtractor.fields,
+              selections: newExtractor.selections,
             },
           });
+          setIsCollapseOpen(true);
           onRunQuery();
         }}
       />

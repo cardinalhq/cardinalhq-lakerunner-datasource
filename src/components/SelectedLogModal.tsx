@@ -114,7 +114,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
               dataType: sel.dataType,
               label: sel.label,
               userSelected: sel.userSelected,
-              sampleValue: '',
+              sampleValue: m,
             });
 
             line = line.substring(position + m.length);
@@ -326,7 +326,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
           <iframe
             ref={selectionFrame}
             src={`${regexGenRoot}/index.html${selectionFrameQueryString}`}
-            style={{ width: '100%', height: 200, border: 0 }}
+            style={{ width: '100%', height: 165, border: 0 }}
           />
         </div>
 
