@@ -49,6 +49,7 @@ export const FilterRow = ({
   const isMetricsMode = mode === 'metrics';
   const isLast = index === filters.length - 1;
   const isTextOperator = TEXT_OPERATORS.includes(filter.op);
+  const isMultiValueOperator = filter.op === 'in' || filter.op === 'not_in';
 
   const hasValidTagAndValue = !!filter.tag?.trim() && !!filter.value?.[0]?.trim();
 
@@ -150,6 +151,25 @@ export const FilterRow = ({
               placeholder="Enter value"
               disabled={!filter.tag}
             />
+          ) : isMultiValueOperator ? (
+            <div style={!filter.tag ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
+              <MultiSelect
+                options={valueOptions}
+                value={
+                  filter.value?.some((v) => !!v && v !== '__loading' && v !== '__none')
+                    ? filter.value.map((v) => ({ label: v, value: v }))
+                    : []
+                }
+                onChange={(v) => {
+                  const selectedValues = v
+                    .map((item) => item.value)
+                    .filter((val): val is string => !!val && val !== '__loading' && val !== '__none');
+                  updateFilter(index, { value: selectedValues });
+                }}
+                placeholder="Select values"
+                isLoading={loadingValues}
+              />
+            </div>
           ) : (
             <div style={!filter.tag ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
               <Combobox

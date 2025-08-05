@@ -111,9 +111,9 @@ export function QueryEditor({
   useEffect(() => {
     const selections = query.extractor?.selections ?? [];
     const numericFields = selections
-      .filter((s) => s.dataType === 'number')
+      .filter((s) => s.dataType === 'number' && s.label && !s.label.startsWith('var_'))
       .map((s) => s.label)
-      .filter((v, i, self) => v && self.indexOf(v) === i);
+      .filter((v, i, self) => self.indexOf(v) === i);
     setExtractedNumericFields(numericFields);
     if (!query.chartField && numericFields.length > 0) {
       setChartField(numericFields[0]);
