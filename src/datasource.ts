@@ -158,7 +158,9 @@ export class DataSource
       return [];
     }
     this.previousFilters[target.refId] = filters;
-    const groupBy: string[] = (target.groupBy ?? isMetrics ? [] : ['level']).map(toInternalLabel);
+    const groupBy: string[] = isLogVolumeQuery
+      ? [toInternalLabel('level')]
+      : (target.groupBy ?? []).map(toInternalLabel);
     const MAX_INITIAL = 1000;
 
     if (isMetrics && target.metricName) {
