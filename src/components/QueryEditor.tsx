@@ -267,13 +267,14 @@ export function QueryEditor({
               </InlineField>
             )}
           </InlineFieldRow>
-
           {extractedNumericFields.length > 0 && (
             <InlineFieldRow style={{ marginTop: 8 }}>
               <InlineField label="Chart">
                 <Combobox
                   options={extractedNumericFields.map((f) => ({ label: f, value: f }))}
-                  value={chartField}
+                  value={
+                    chartField && extractedNumericFields.includes(chartField) ? chartField : '' // fallback if invalid or cleared
+                  }
                   onChange={(v) => {
                     const field = v?.value ?? null;
                     setChartField(field);

@@ -56,14 +56,26 @@ export class DataSource
   }
 
   getSupplementaryQuery(options: SupplementaryQueryOptions, query: MyQuery): MyQuery | undefined {
+    if (query.mode === 'metrics' && options.type === SupplementaryQueryType.LogsVolume) {
+      return undefined;
+    }
     if (query.mode === 'metrics' && options.type === SupplementaryQueryType.LogsSample) {
       return undefined;
     }
+
     switch (options.type) {
       case SupplementaryQueryType.LogsVolume:
-        return { ...query, refId: `volume-${query.refId}`, queryText: 'volume' };
+        return {
+          ...query,
+          refId: `volume-${query.refId}`,
+          queryText: 'volume',
+        };
       case SupplementaryQueryType.LogsSample:
-        return { ...query, refId: `sample-${query.refId}`, queryText: 'sample' };
+        return {
+          ...query,
+          refId: `sample-${query.refId}`,
+          queryText: 'sample',
+        };
       default:
         return undefined;
     }
@@ -121,8 +133,8 @@ export class DataSource
     signal: AbortSignal
   ): Promise<DataFrame[]> {
     this.resetLogBodyCache(target.refId);
-    const isLogVolumeQuery = target.queryText === 'volume';
 
+    const isLogVolumeQuery = target.queryText === 'volume';
     const isMetrics = target.mode === 'metrics';
     const rawFilters: Filter[] = target.filters ?? [];
     const filters: Filter[] = rawFilters.filter((f) => {
@@ -146,7 +158,7 @@ export class DataSource
       return [];
     }
     this.previousFilters[target.refId] = filters;
-    const groupBy: string[] = (target.groupBy ?? []).map(toInternalLabel);
+    const groupBy: string[] = (target.groupBy ?? isMetrics ? [] : ['level']).map(toInternalLabel);
     const MAX_INITIAL = 1000;
 
     if (isMetrics && target.metricName) {
@@ -283,20 +295,6 @@ export class DataSource
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    const palette = [
-      '#7EB26D',
-      '#EAB839',
-      '#6ED0E0',
-      '#EF843C',
-      '#E24D42',
-      '#1F78C1',
-      '#BA43A9',
-      '#705DA0',
-      '#508642',
-      '#CCA300',
-      '#447EBC',
-      '#C15C17',
-    ];
 
     const frameData: Record<string, { timestamps: number[]; values: number[] }> = {};
     const timestamps: number[] = [];
@@ -311,15 +309,26 @@ export class DataSource
     const frames: DataFrame[] = [];
 
     const flushMetricFrames = () => {
+      const levelColors: Record<string, string> = {
+        debug: '#C8C8C8',
+        info: '#32CD32',
+        warn: '#FFD700',
+        error: '#DC143C',
+      };
+
       for (const [label, series] of Object.entries(frameData)) {
-        let hash = 0;
-        const str = target.refId + '::' + label;
-        for (let i = 0; i < str.length; i++) {
-          hash = str.charCodeAt(i) + ((hash << 5) - hash);
-        }
-        const colorIdx = Math.abs(hash) % palette.length;
+        const ref = target.refId;
+
+        const match = /^level=(\w+)$/.exec(label);
+        const level = match?.[1];
+
+        const labels = level ? { level, detected_level: level } : undefined;
+        const displayName = level ? `{detected_level="${level}", level="${level}"}` : label;
+
+        const color = levelColors[level?.toLowerCase() ?? ''] ?? undefined;
+
         const frame = toDataFrame({
-          refId: target.refId,
+          refId: ref,
           name: label,
           fields: [
             { name: 'Time', type: FieldType.time, values: series.timestamps },
@@ -327,12 +336,14 @@ export class DataSource
               name: 'Value',
               type: FieldType.number,
               values: series.values,
+              labels,
               config: {
-                displayName: label,
-                color: {
-                  mode: 'fixed',
-                  fixedColor: palette[colorIdx],
-                },
+                displayNameFromDS: displayName,
+                color: color
+                  ? { mode: 'fixed', fixedColor: color }
+                  : {
+                      mode: 'palette-classic',
+                    },
               },
             },
           ],
@@ -360,6 +371,7 @@ export class DataSource
         preferredVisualisationType: 'logs',
         custom: { limit: 1000 },
       };
+
       frames.push(frame);
     };
 
@@ -385,8 +397,6 @@ export class DataSource
           if (!msg) {
             continue;
           }
-
-          const isVolume = target.queryText === 'volume' || target.refId.startsWith('volume-');
           if (parsed.type === 'timeseries' && hasNumericChartField && !isMetrics && !isLogVolumeQuery) {
             const value = msg.value;
             const label = `${chartField}=extracted`;
@@ -399,21 +409,16 @@ export class DataSource
               frameData[label].timestamps.push(ts);
               frameData[label].values.push(value);
             }
-          } else if (isMetrics || isVolume) {
+          } else if (isMetrics) {
             const ts = msg.timestamp;
             const val = msg.value ?? 0;
             const tags = msg.tags ?? {};
-
             const labelParts: string[] = groupBy.map((key) => {
               const prettyKey = key.replace(/^_cardinalhq\./, '');
               return `${prettyKey}=${tags[key] ?? 'unknown'}`;
             });
 
-            const label = labelParts.length
-              ? labelParts.join(', ')
-              : isMetrics
-              ? target.metricName ?? 'metric'
-              : 'log.events';
+            const label = labelParts.length ? labelParts.join(', ') : isMetrics ? target.metricName ?? 'metric' : '';
 
             if (!frameData[label]) {
               frameData[label] = { timestamps: [], values: [] };
@@ -423,13 +428,29 @@ export class DataSource
             frameData[label].values.push(val);
 
             emitCount++;
+          } else if (parsed.type === 'timeseries' && msg.tags?.name === 'log.events') {
+            const ts = msg.timestamp;
+            const val = msg.value ?? 0;
+            const tags = msg.tags || {};
+
+            const labelParts = groupBy.map((key) => {
+              const prettyKey = key.replace(/^_cardinalhq\./, '');
+              return `${prettyKey}=${tags[key] ?? 'unknown'}`;
+            });
+            const label = labelParts.length > 0 ? labelParts.join(', ') : tags.name || 'log.events';
+
+            if (!frameData[label]) {
+              frameData[label] = { timestamps: [], values: [] };
+            }
+            frameData[label].timestamps.push(ts);
+            frameData[label].values.push(val);
+            emitCount++;
           } else if (parsed.type === 'event') {
             const ts = msg.timestamp;
             const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
             const severity = msg.tags?.['_cardinalhq.level'] || '';
             const id = msg.tags?.['_cardinalhq.id'] || '';
             const rawTags = msg.tags || {};
-
             const labelTags: Record<string, any> = {};
 
             if (rawTags['_cardinalhq.message']) {
