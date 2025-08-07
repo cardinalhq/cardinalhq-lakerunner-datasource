@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -41,9 +42,11 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 	return response, nil
 }
 
-type queryModel struct{}
+type queryModel struct {
+	MetricName string `json:"metricName"`
+}
 
-func (d *Datasource) query(_ context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
+func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
 	var response backend.DataResponse
 	var qm queryModel
 
@@ -52,13 +55,135 @@ func (d *Datasource) query(_ context.Context, pCtx backend.PluginContext, query 
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("json unmarshal: %v", err.Error()))
 	}
 
-	frame := data.NewFrame("response")
-	frame.Fields = append(frame.Fields,
-		data.NewField("time", nil, []time.Time{query.TimeRange.From, query.TimeRange.To}),
-		data.NewField("values", nil, []int64{10, 20}),
-	)
-	response.Frames = append(response.Frames, frame)
-	return response
+	config, err := models.LoadPluginSettings(*pCtx.DataSourceInstanceSettings)
+	if err != nil {
+		return backend.ErrDataResponse(backend.StatusBadRequest, "Failed to load plugin settings")
+	}
+
+	startTime := query.TimeRange.From.UnixMilli()
+	endTime := query.TimeRange.To.UnixMilli()
+	path := "/api/v1/graph?s=" + strconv.FormatInt(startTime, 10) + "&e=" + strconv.FormatInt(endTime, 10)
+	fullURL := strings.TrimRight(config.JsonData.CustomPath, "/") + path
+
+	var body = map[string]interface{}{
+		"baseExpressions": map[string]interface{}{
+			"a": map[string]interface{}{
+				"dataset": "metrics",
+				"filter": map[string]interface{}{
+					"k":         "_cardinalhq.name",
+					"v":         []string{qm.MetricName},
+					"op":        "eq",
+					"dataType":  "string",
+					"extracted": false,
+					"computed":  false,
+				},
+				"chart": map[string]interface{}{
+					"aggregation": "sum",
+					"rollup":      "sum",
+					"type":        "count",
+					"groupBy":     []string{},
+				},
+			},
+		},
+	}
+
+	method := http.MethodPost
+	var bodyReader io.Reader
+	bodyBytes, _ := json.Marshal(body)
+	bodyReader = bytes.NewReader(bodyBytes)
+
+	httpReq, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
+	if err != nil {
+		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
+	}
+
+	httpReq.Header.Set("api-key", config.Secrets.ApiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	if err != nil {
+		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
+	}
+	defer resp.Body.Close()
+
+	reader := resp.Body
+	buffer := ""
+	buf := make([]byte, 32*1024)
+	doneReceived := false
+
+	timestamps := []time.Time{}
+	values := []float64{}
+
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			buffer += string(buf[:n])
+			lines := strings.Split(buffer, "\n")
+			buffer = lines[len(lines)-1]
+			lines = lines[:len(lines)-1]
+
+			for _, line := range lines {
+				line = strings.TrimSpace(line)
+				if !strings.HasPrefix(line, "data:") {
+					continue
+				}
+
+				msgStr := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+
+				var outer struct {
+					Type    string          `json:"type"`
+					Message json.RawMessage `json:"message"`
+				}
+				if err := json.Unmarshal([]byte(msgStr), &outer); err != nil {
+					continue
+				}
+				if outer.Type == "done" {
+					doneReceived = true
+					continue
+				}
+				if outer.Type != "timeseries" {
+					continue
+				}
+
+				var msg struct {
+					Timestamp int64                  `json:"timestamp"`
+					Value     float64                `json:"value"`
+					Tags      map[string]interface{} `json:"tags"`
+					Label     string                 `json:"label"`
+				}
+				if err := json.Unmarshal(outer.Message, &msg); err != nil {
+					continue
+				}
+
+				ts := time.UnixMilli(msg.Timestamp)
+
+				timestamps = append(timestamps, ts)
+				values = append(values, msg.Value)
+			}
+		}
+
+		if err != nil {
+			if err == io.EOF {
+				if doneReceived || len(response.Frames) > 0 {
+					return response
+				}
+				return backend.ErrDataResponse(backend.StatusBadRequest, "Stream ended without data or done message")
+			}
+			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Error reading stream: %v", err))
+		}
+
+		if doneReceived {
+			timeField := data.NewField("Time", nil, timestamps)
+			valueField := data.NewField("Value", nil, values)
+			frame := data.NewFrame(query.RefID, timeField, valueField)
+			frame.RefID = query.RefID
+			frame.Meta = &data.FrameMeta{PreferredVisualization: data.VisTypeGraph}
+			response.Frames = append(response.Frames, frame)
+
+			return response
+		}
+	}
 }
 
 func (d *Datasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
@@ -178,7 +303,7 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 
 			out := &backend.CallResourceResponse{
 				Status: resp.StatusCode,
-				Body:   append([]byte(nil), chunk...), 
+				Body:   append([]byte(nil), chunk...),
 			}
 			if first {
 				out.Headers = map[string][]string{

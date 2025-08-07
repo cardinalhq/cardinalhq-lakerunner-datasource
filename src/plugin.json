@@ -6,6 +6,7 @@
   "logs": true,
   "streaming": true,
   "backend": true,
+  "alerting": true,
   "executable": "gpx_cardinalhq_datasource",
   "info": {
     "description": "Explore and visualize logs and metrics stored in your own open-source private datalake",
