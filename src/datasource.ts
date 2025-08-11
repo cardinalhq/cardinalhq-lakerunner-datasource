@@ -10,9 +10,11 @@ import {
   DataSourceWithSupplementaryQueriesSupport,
   toDataFrame,
   DataFrame,
+  ScopedVars,
 } from '@grafana/data';
+import { getTemplateSrv } from '@grafana/runtime';
 import { Observable } from 'rxjs';
-import { MyQuery, MyDataSourceOptions, Filter } from './types';
+import { MyQuery, MyDataSourceOptions, Filter, TEXT_OPERATORS } from './types';
 import { buildNestedFilter } from './util/buildNestedFilter';
 import { toInternalLabel } from './services/logs';
 
@@ -39,6 +41,56 @@ export class DataSource
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
     super(instanceSettings);
   }
+
+  private applyTemplateVariables(q: MyQuery, scopedVars: ScopedVars): MyQuery {
+    const tsrv = getTemplateSrv();
+    const repl = (v?: string, fmt?: string) => (v == null ? v : tsrv.replace(v, scopedVars, fmt));
+
+    const expandValues = (op: string, vals: string[] = []) => {
+      const isTextOrRegex = TEXT_OPERATORS.includes(op as any) || op === 'regex' || op === 'not regex';
+      const fmt = isTextOrRegex ? 'regex' : 'csv';
+
+      const out: string[] = [];
+      for (const raw of vals) {
+        const rep = repl(raw, fmt) ?? '';
+        if (!rep) {
+          continue;
+        }
+        if (fmt === 'csv') {
+          rep
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean)
+            .forEach((v) => out.push(v));
+        } else {
+          out.push(rep);
+        }
+      }
+      return out.length ? out : vals;
+    };
+
+    return {
+      ...q,
+      metricName: repl(q.metricName),
+      // Template both key and values
+      filters: (q.filters ?? []).map((f) => ({
+        ...f,
+        tag: repl(f.tag) as string,
+        value: expandValues(f.op, f.value),
+      })),
+      // Template groupBy labels
+      groupBy: (q.groupBy ?? []).map((g) => repl(g) as string),
+
+      // leave the rest as-is (no extractor templating per your request)
+      queryText: q.queryText,
+      metricType: q.metricType,
+      chartField: q.chartField,
+      chartAggregation: q.chartAggregation,
+      aggregation: q.aggregation,
+      extractor: q.extractor,
+    };
+  }
+
   public getCachedLogBodies(refId: string): string[] {
     const set = this.logBodyCache[refId] || new Set<string>();
     return Array.from(set);
@@ -104,8 +156,12 @@ export class DataSource
       const run = async () => {
         const allFrames: any[] = [];
 
+        const templatedTargets = request.targets
+          .filter((t) => !t.hide)
+          .map((t) => this.applyTemplateVariables(t, request.scopedVars ?? ({} as ScopedVars)));
+
         await Promise.all(
-          request.targets.map(async (target) => {
+          templatedTargets.map(async (target) => {
             try {
               const frames = await this.runSingleQuery(target, request.range, controller.signal);
               allFrames.push(...frames);

@@ -1,4 +1,5 @@
-import { Filter } from '../types';
+import { getTemplateSrv } from '@grafana/runtime';
+import { Filter, TEXT_OPERATORS } from '../types';
 import { buildNestedFilter } from '../util/buildNestedFilter';
 import { apiFetchEventSourceWrapper, EventSourceOptions } from '../util/QueryUtils';
 
@@ -44,13 +45,11 @@ async function streamJsonCollect(
             setIsWaiting?.(true);
             return;
           }
-
           if (parsed.type === 'done') {
             setIsWaiting?.(false);
             resolve();
             return;
           }
-
           if (parsed.type === 'data' && parsed.message) {
             onData(parsed.message);
           }
@@ -65,6 +64,44 @@ async function streamJsonCollect(
 
     apiFetchEventSourceWrapper(url, opts);
   });
+}
+
+const tsrv = getTemplateSrv();
+const isUnresolved = (s?: string) => !!s && s.includes('$');
+const replaceVar = (s?: string, fmt?: 'csv' | 'regex') =>
+  s == null ? s : (tsrv.replace(s, undefined as any, fmt) as string);
+
+function normalizeFilterForOptions(f: Filter): Filter | null {
+  const tag = replaceVar(f.tag);
+  if (!tag || isUnresolved(tag)) {
+    return null;
+  }
+
+  const isTextOrRegex = TEXT_OPERATORS.includes(f.op as any) || f.op === 'regex' || f.op === 'not regex';
+  const fmt: 'csv' | 'regex' = isTextOrRegex ? 'regex' : 'csv';
+
+  const vals: string[] = [];
+  for (const raw of f.value ?? []) {
+    const rep = replaceVar(raw, fmt) ?? '';
+    if (!rep || isUnresolved(rep)) {
+      continue;
+    }
+    if (fmt === 'csv') {
+      rep
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .forEach((v) => vals.push(v));
+    } else {
+      vals.push(rep);
+    }
+  }
+
+  if (!isTextOrRegex && vals.length === 0) {
+    return null;
+  }
+
+  return { ...f, tag, value: vals };
 }
 
 export async function fetchTagKeys({
@@ -92,42 +129,32 @@ export async function fetchTagKeys({
 }): Promise<string[]> {
   const keys = new Set<string>();
   const path = `/api/v1/tags/${mode}?s=${startTime}&e=${endTime}`;
-  const nestedFilter = buildNestedFilter(filters);
 
-  const fallbackFilter =
-    mode === 'logs'
-      ? {
-          k: '_cardinalhq.name',
-          v: [''],
-          op: 'has',
-          dataType: 'string',
-          extracted: false,
-          computed: false,
-        }
-      : undefined;
+  const resolvedMetricName = metricName ? replaceVar(metricName) : undefined;
+  const metricNameUsable = !!resolvedMetricName && !isUnresolved(resolvedMetricName);
+  const safeFilters = (filters ?? []).map(normalizeFilterForOptions).filter((f): f is Filter => !!f);
+  const nestedFilter = buildNestedFilter(safeFilters);
 
-  let filter;
+  let filter: any;
   if (mode === 'metrics') {
-    const filterEntries: Record<string, any> = {};
+    const parts: Record<string, any> = {};
     let i = 1;
 
-    if (metricName) {
-      filterEntries[`q${i++}`] = {
+    if (metricNameUsable) {
+      parts[`q${i++}`] = {
         k: '_cardinalhq.name',
-        v: [metricName],
+        v: [resolvedMetricName],
         op: 'eq',
         dataType: 'string',
         extracted: false,
         computed: false,
       };
     }
-
     if (nestedFilter) {
-      filterEntries[`q${i++}`] = nestedFilter;
+      parts[`q${i++}`] = nestedFilter;
     }
 
-    filter = Object.keys(filterEntries).length > 1 ? { ...filterEntries, op: 'and' } : Object.values(filterEntries)[0];
-
+    filter = Object.keys(parts).length > 1 ? { ...parts, op: 'and' } : Object.values(parts)[0];
     if (!filter) {
       filter = {
         k: '_cardinalhq.name',
@@ -139,7 +166,16 @@ export async function fetchTagKeys({
       };
     }
   } else {
-    filter = nestedFilter ?? fallbackFilter;
+    filter =
+      nestedFilter ??
+      ({
+        k: '_cardinalhq.name',
+        v: [''],
+        op: 'has',
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      } as any);
   }
 
   const body: Record<string, any> = {
@@ -149,7 +185,6 @@ export async function fetchTagKeys({
     order: 'DESC',
     returnResults: true,
   };
-
   if (mode === 'metrics' && metricType) {
     body.metricType = metricType;
   }
@@ -204,38 +239,42 @@ export async function fetchTagValues({
     throw new Error('labelName is required');
   }
 
+  const resolvedLabel = replaceVar(labelName);
+  if (!resolvedLabel || isUnresolved(resolvedLabel)) {
+    return [];
+  }
+  const internalLabel = toInternalLabel(resolvedLabel);
+
   const vals = new Set<string>();
-  const internalLabel = toInternalLabel(labelName);
   const path = `/api/v1/tags/${mode}?s=${startTime}&e=${endTime}&tagName=${encodeURIComponent(
     internalLabel
   )}&dataType=string`;
 
-  const nestedFilter = buildNestedFilter(filters);
+  const resolvedMetricName = metricName ? replaceVar(metricName) : undefined;
+  const metricNameUsable = !!resolvedMetricName && !isUnresolved(resolvedMetricName);
+  const safeFilters = (filters ?? []).map(normalizeFilterForOptions).filter((f): f is Filter => !!f);
+  const nestedFilter = buildNestedFilter(safeFilters);
 
-  const metricNameFilter =
-    mode === 'metrics' && metricName
-      ? {
-          k: '_cardinalhq.name',
-          v: [metricName],
-          op: 'eq',
-          dataType: 'string',
-          extracted: false,
-          computed: false,
-        }
-      : undefined;
-
-  let filter;
+  let filter: any;
   if (mode === 'metrics') {
-    const filterEntries: Record<string, any> = {};
+    const parts: Record<string, any> = {};
     let i = 1;
-    if (metricNameFilter) {
-      filterEntries[`q${i++}`] = metricNameFilter;
+
+    if (metricNameUsable) {
+      parts[`q${i++}`] = {
+        k: '_cardinalhq.name',
+        v: [resolvedMetricName],
+        op: 'eq',
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      };
     }
     if (nestedFilter) {
-      filterEntries[`q${i++}`] = nestedFilter;
+      parts[`q${i++}`] = nestedFilter;
     }
-    filter = Object.keys(filterEntries).length > 1 ? { ...filterEntries, op: 'and' } : Object.values(filterEntries)[0];
 
+    filter = Object.keys(parts).length > 1 ? { ...parts, op: 'and' } : Object.values(parts)[0];
     if (!filter) {
       filter = {
         k: '_cardinalhq.name',
@@ -247,14 +286,16 @@ export async function fetchTagValues({
       };
     }
   } else {
-    filter = nestedFilter ?? {
-      k: internalLabel,
-      v: [''],
-      op: 'has',
-      dataType: 'string',
-      extracted: false,
-      computed: false,
-    };
+    filter =
+      nestedFilter ??
+      ({
+        k: internalLabel,
+        v: [''],
+        op: 'has',
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      } as any);
   }
 
   const body: Record<string, any> = {
@@ -264,7 +305,6 @@ export async function fetchTagValues({
     order: 'DESC',
     returnResults: true,
   };
-
   if (mode === 'metrics' && metricType) {
     body.metricType = metricType;
   }

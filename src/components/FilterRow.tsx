@@ -1,4 +1,4 @@
-import { Button, Combobox, IconButton, InlineField, InlineFieldRow, Input, MultiSelect } from '@grafana/ui';
+import { Button, Combobox, IconButton, InlineField, InlineFieldRow, Input, Select } from '@grafana/ui';
 import type { DataSource } from 'datasource';
 import React, { useMemo } from 'react';
 import { useLabels } from '../hooks/useLabels';
@@ -56,8 +56,7 @@ export const FilterRow = ({
   const scopedFilters = useMemo(() => {
     const prior = filters.slice(0, index);
     const current = hasValidTagAndValue ? [filter] : [];
-    const full = [...prior, ...current];
-    return full;
+    return [...prior, ...current];
   }, [filters, filter, index, hasValidTagAndValue]);
 
   const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName);
@@ -86,7 +85,8 @@ export const FilterRow = ({
     metricType,
     setIsWaiting,
   });
-  const tagOptions =
+
+  const tagOptionsBase =
     loadingGroupByLabels || groupByLabels.length === 0
       ? [{ label: 'Loading...', value: '__loading' }]
       : groupByLabels
@@ -94,19 +94,42 @@ export const FilterRow = ({
           .map((l: string) => ({ label: l, value: l }))
           .sort((a, b) => a.label.localeCompare(b.label));
 
-  const valueOptions = loadingValues
+  const tagOptions =
+    filter.tag && !tagOptionsBase.some((o) => o.value === filter.tag)
+      ? [...tagOptionsBase, { label: filter.tag, value: filter.tag }]
+      : tagOptionsBase;
+
+  const valueOptionsBase = loadingValues
     ? [{ label: 'Loading...', value: '__loading' }]
     : values.length === 0
     ? [{ label: 'No values', value: '__none' }]
     : values.map((v: string) => ({ label: v, value: v })).sort((a, b) => a.label.localeCompare(b.label));
 
+  const valueOptions = filter.value
+    ? [
+        ...valueOptionsBase,
+        ...filter.value
+          .filter((val) => !valueOptionsBase.some((o) => o.value === val))
+          .map((val) => ({ label: val, value: val })),
+      ]
+    : valueOptionsBase;
+
+  const groupByOptions = groupBy.length
+    ? [
+        ...tagOptionsBase,
+        ...groupBy.filter((g) => !tagOptionsBase.some((o) => o.value === g)).map((g) => ({ label: g, value: g })),
+      ]
+    : tagOptionsBase;
+
   return (
     <>
       <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
+        {/* Tag */}
         <InlineField>
-          <Combobox
+          <Select
             options={tagOptions}
-            value={filter.tag}
+            value={filter.tag ? { label: filter.tag, value: filter.tag } : null}
+            allowCustomValue
             onChange={(v) => {
               const selected = v?.value ?? '';
               if (selected === '__loading') {
@@ -120,11 +143,11 @@ export const FilterRow = ({
               });
             }}
             placeholder="Tag name"
-            disabled={loadingGroupByLabels}
-            loading={loadingGroupByLabels}
+            isLoading={loadingGroupByLabels}
           />
         </InlineField>
 
+        {/* Operator */}
         <InlineField>
           <Combobox
             width={10}
@@ -139,31 +162,27 @@ export const FilterRow = ({
           />
         </InlineField>
 
+        {/* Value */}
         <InlineField>
           {isTextOperator ? (
             <Input
               value={filter.value?.[0] ?? ''}
-              onChange={(e) => {
-                const val = e.currentTarget.value;
-                updateFilter(index, { value: [val] });
-              }}
+              onChange={(e) => updateFilter(index, { value: [e.currentTarget.value] })}
               width={30}
               placeholder="Enter value"
               disabled={!filter.tag}
             />
           ) : isMultiValueOperator ? (
             <div style={!filter.tag ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
-              <MultiSelect
+              <Select
                 options={valueOptions}
-                value={
-                  filter.value?.some((v) => !!v && v !== '__loading' && v !== '__none')
-                    ? filter.value.map((v) => ({ label: v, value: v }))
-                    : []
-                }
+                value={filter.value?.map((v) => ({ label: v, value: v })) ?? []}
+                allowCustomValue
+                isMulti
                 onChange={(v) => {
                   const selectedValues = v
-                    .map((item) => item.value)
-                    .filter((val): val is string => !!val && val !== '__loading' && val !== '__none');
+                    .map((item: { value: string }) => item.value)
+                    .filter((val: string) => !!val && val !== '__loading' && val !== '__none');
                   updateFilter(index, { value: selectedValues });
                 }}
                 placeholder="Select values"
@@ -172,57 +191,55 @@ export const FilterRow = ({
             </div>
           ) : (
             <div style={!filter.tag ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
-              <Combobox
+              <Select
                 options={valueOptions}
-                value={filter.value?.[0] ?? ''}
+                value={filter.value?.[0] ? { label: filter.value[0], value: filter.value[0] } : null}
+                allowCustomValue
                 onChange={(v) => {
                   const val = v?.value ?? '';
                   if (val !== '__loading' && val !== '__none') {
                     updateFilter(index, { value: [val] });
                   }
                 }}
-                placeholder="value"
-                loading={loadingValues}
+                placeholder="Value"
+                isLoading={loadingValues}
               />
             </div>
           )}
         </InlineField>
 
+        {/* Remove */}
         <InlineField>
           <IconButton
             name="trash-alt"
             title="Remove filter"
             aria-label="Remove filter"
-            onClick={() => {
-              removeFilter(index);
-            }}
+            onClick={() => removeFilter(index)}
           />
         </InlineField>
 
+        {/* Add */}
         {isLast && (
           <InlineField>
-            <Button
-              icon="plus"
-              variant="secondary"
-              onClick={() => {
-                addFilter();
-              }}
-            />
+            <Button icon="plus" variant="secondary" onClick={addFilter} />
           </InlineField>
         )}
       </InlineFieldRow>
 
+      {/* Group By + Aggregation */}
       {isLast && (
         <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
           <InlineField label="Group by">
-            <MultiSelect
+            <Select
               placeholder="Group by"
-              options={tagOptions}
-              value={groupBy}
+              options={groupByOptions}
+              value={groupBy.map((g) => ({ label: g, value: g }))}
+              allowCustomValue
+              isMulti
               onChange={(v) => {
                 const selected = v
-                  .map((item) => item.value)
-                  .filter((val): val is string => Boolean(val && val !== '__loading'));
+                  .map((item: { value: string }) => item.value)
+                  .filter((val: string) => Boolean(val && val !== '__loading'));
                 updateGroupBy(selected);
               }}
             />
@@ -233,10 +250,7 @@ export const FilterRow = ({
               placeholder="Aggregation"
               options={isMetricsMode ? AGGREGATE_OPTIONS : AGGREGATE_OPTIONS.filter((opt) => opt.value === 'sum')}
               value={aggregation}
-              onChange={(v) => {
-                const selected = (v?.value ?? '') as Aggregation;
-                updateAggregation(selected);
-              }}
+              onChange={(v) => updateAggregation((v?.value ?? '') as Aggregation)}
             />
           </InlineField>
         </InlineFieldRow>
