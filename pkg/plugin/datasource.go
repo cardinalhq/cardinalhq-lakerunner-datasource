@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -23,12 +24,10 @@ var (
 	_ instancemgmt.InstanceDisposer = (*Datasource)(nil)
 )
 
-// NewDatasource creates a new datasource instance.
 func NewDatasource(_ context.Context, _ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	return &Datasource{}, nil
 }
 
-// Datasource implements Grafana interfaces
 type Datasource struct{}
 
 func (d *Datasource) Dispose() {}
@@ -43,15 +42,128 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 }
 
 type queryModel struct {
-	MetricName string `json:"metricName"`
+	Mode        string     `json:"mode"`
+	MetricName  string     `json:"metricName"`
+	MetricType  string     `json:"metricType"`
+	Aggregation string     `json:"aggregation"`
+	GroupBy     []string   `json:"groupBy"`
+	Filters     []uiFilter `json:"filters"`
+	QueryText   string     `json:"queryText"`
+}
+
+type uiFilter struct {
+	Tag       string   `json:"tag"`
+	Op        string   `json:"op"`
+	Value     []string `json:"value"`
+	DataType  string   `json:"dataType,omitempty"`
+	Extracted bool     `json:"extracted,omitempty"`
+	Computed  bool     `json:"computed,omitempty"`
+}
+
+var userLabelToInternal = map[string]string{
+	"message": "_cardinalhq.message",
+	"level":   "_cardinalhq.level",
+}
+
+func mapToInternalLabel(label string) string {
+	if v, ok := userLabelToInternal[label]; ok {
+		return v
+	}
+	return label
+}
+
+func toInternalLabel(s string) string {
+	if s == "" || strings.HasPrefix(s, "_cardinalhq.") {
+		return s
+	}
+	return "_cardinalhq." + s
+}
+
+func cleanFilters(in []uiFilter) []uiFilter {
+	out := make([]uiFilter, 0, len(in))
+	for _, f := range in {
+		tag := strings.TrimSpace(f.Tag)
+		hasVal := false
+		for _, v := range f.Value {
+			if strings.TrimSpace(v) != "" {
+				hasVal = true
+				break
+			}
+		}
+		if tag != "" && hasVal {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func convertOpTS(op string) string {
+	switch op {
+	case "=":
+		return "eq"
+	case "!=":
+		return "neq"
+	case "in":
+		return "in"
+	case "not_in":
+		return "not_in"
+	case "contains":
+		return "contains"
+	case "not contains":
+		return "not_contains"
+	case "regex":
+		return "regex"
+	case "not regex":
+		return "not_regex"
+	case "has":
+		return "has"
+	default:
+		return "eq"
+	}
+}
+
+func convertFilterTS(f uiFilter) map[string]interface{} {
+	return map[string]interface{}{
+		"k":         mapToInternalLabel(f.Tag),
+		"v":         f.Value,
+		"op":        convertOpTS(f.Op),
+		"dataType":  firstNonEmpty(f.DataType, "string"),
+		"extracted": f.Extracted,
+		"computed":  f.Computed,
+	}
+}
+
+func buildNestedFilterTS(filters []uiFilter) map[string]interface{} {
+	if len(filters) == 0 {
+		return nil
+	}
+	if len(filters) == 1 {
+		return convertFilterTS(filters[0])
+	}
+	block := map[string]interface{}{"op": "and"}
+	for i, f := range filters {
+		key := fmt.Sprintf("q%d", i+1)
+		block[key] = convertFilterTS(f)
+	}
+	return block
+}
+
+func firstNonEmpty(a, b string) string {
+	if strings.TrimSpace(a) != "" {
+		return a
+	}
+	return b
+}
+
+func prettyLabel(s string) string {
+	return strings.ReplaceAll(s, "_cardinalhq.", "")
 }
 
 func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
 	var response backend.DataResponse
 	var qm queryModel
 
-	err := json.Unmarshal(query.JSON, &qm)
-	if err != nil {
+	if err := json.Unmarshal(query.JSON, &qm); err != nil {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("json unmarshal: %v", err.Error()))
 	}
 
@@ -65,38 +177,89 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	path := "/api/v1/graph?s=" + strconv.FormatInt(startTime, 10) + "&e=" + strconv.FormatInt(endTime, 10)
 	fullURL := strings.TrimRight(config.JsonData.CustomPath, "/") + path
 
-	var body = map[string]interface{}{
-		"baseExpressions": map[string]interface{}{
-			"a": map[string]interface{}{
-				"dataset": "metrics",
-				"filter": map[string]interface{}{
-					"k":         "_cardinalhq.name",
-					"v":         []string{qm.MetricName},
-					"op":        "eq",
-					"dataType":  "string",
-					"extracted": false,
-					"computed":  false,
-				},
-				"chart": map[string]interface{}{
-					"aggregation": "sum",
-					"rollup":      "sum",
-					"type":        "count",
-					"groupBy":     []string{},
-				},
-			},
-		},
+	isMetrics := strings.EqualFold(qm.Mode, "metrics")
+	qt := strings.TrimSpace(qm.QueryText)
+	isLogsVolume := !isMetrics && (strings.EqualFold(qt, "volume") || qt == "")
+
+	filters := cleanFilters(qm.Filters)
+
+	if isMetrics && strings.TrimSpace(qm.MetricName) != "" {
+		injected := uiFilter{
+			Tag:      "_cardinalhq.name",
+			Op:       "=",
+			Value:    []string{qm.MetricName},
+			DataType: "string",
+		}
+		filters = append([]uiFilter{injected}, filters...)
 	}
 
-	method := http.MethodPost
-	var bodyReader io.Reader
-	bodyBytes, _ := json.Marshal(body)
-	bodyReader = bytes.NewReader(bodyBytes)
+	nested := buildNestedFilterTS(filters)
 
-	httpReq, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
+	groupBys := make([]string, 0, len(qm.GroupBy))
+	for _, g := range qm.GroupBy {
+		gt := strings.TrimSpace(g)
+		if gt == "" {
+			continue
+		}
+		switch gt {
+		case "message", "level":
+			groupBys = append(groupBys, mapToInternalLabel(gt))
+		default:
+			groupBys = append(groupBys, gt)
+		}
+	}
+	if isLogsVolume && len(groupBys) == 0 {
+		groupBys = []string{"_cardinalhq.level"}
+	}
+
+	agg := firstNonEmpty(qm.Aggregation, "sum")
+	rangeMs := endTime - startTime
+	var bucketSizeMs int64
+	if query.Interval > 0 {
+		bucketSizeMs = query.Interval.Milliseconds()
+	}
+	if bucketSizeMs <= 0 && rangeMs > 0 {
+		mdp := query.MaxDataPoints
+		if mdp <= 0 {
+			mdp = 1100
+		}
+		if rangeMs/int64(mdp) < 1000 {
+			bucketSizeMs = 1000
+		} else {
+			bucketSizeMs = rangeMs / int64(mdp)
+		}
+	}
+
+	chart := map[string]interface{}{
+		"aggregation":  agg,
+		"rollup":       agg,
+		"groupBys":     groupBys,
+		"bucketSizeMs": bucketSizeMs,
+	}
+	dataset := "metrics"
+	if isLogsVolume {
+		dataset = "logs"
+		chart["type"] = "rate"
+	} else {
+		chart["type"] = "count"
+	}
+
+	expr := map[string]interface{}{
+		"dataset":       dataset,
+		"returnResults": true,
+		"filter":        nested,
+		"chart":         chart,
+	}
+	if strings.TrimSpace(qm.MetricType) != "" {
+		expr["metricType"] = qm.MetricType
+	}
+
+	body := map[string]interface{}{"baseExpressions": map[string]interface{}{"a": expr}}
+	bodyBytes, _ := json.Marshal(body)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
 	}
-
 	httpReq.Header.Set("api-key", config.Secrets.ApiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
@@ -112,8 +275,14 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	buf := make([]byte, 32*1024)
 	doneReceived := false
 
-	timestamps := []time.Time{}
-	values := []float64{}
+	type pointSeries struct {
+		times []time.Time
+		vals  []float64
+	}
+	series := map[string]*pointSeries{}
+
+	sseSamples := 0
+	const sseSampleMax = 5
 
 	for {
 		n, err := reader.Read(buf)
@@ -128,7 +297,6 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 				if !strings.HasPrefix(line, "data:") {
 					continue
 				}
-
 				msgStr := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 
 				var outer struct {
@@ -138,6 +306,11 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 				if err := json.Unmarshal([]byte(msgStr), &outer); err != nil {
 					continue
 				}
+
+				if sseSamples < sseSampleMax {
+					sseSamples++
+				}
+
 				if outer.Type == "done" {
 					doneReceived = true
 					continue
@@ -156,10 +329,42 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 					continue
 				}
 
-				ts := time.UnixMilli(msg.Timestamp)
+				if isLogsVolume {
+					if name, ok := msg.Tags["name"].(string); ok && name != "log.events" {
+						continue
+					}
+				}
 
-				timestamps = append(timestamps, ts)
-				values = append(values, msg.Value)
+				ts := time.UnixMilli(msg.Timestamp)
+				lbl := strings.TrimSpace(msg.Label)
+				if lbl == "" {
+					if len(groupBys) > 0 && msg.Tags != nil {
+						parts := make([]string, 0, len(groupBys))
+						for _, key := range groupBys {
+							pretty := strings.TrimPrefix(key, "_cardinalhq.")
+							var val string
+							if v, ok := msg.Tags[key]; ok {
+								val = fmt.Sprint(v)
+							} else if v, ok := msg.Tags[pretty]; ok {
+								val = fmt.Sprint(v)
+							}
+							if val == "" {
+								val = "unknown"
+							}
+							parts = append(parts, fmt.Sprintf("%s=%s", pretty, val))
+						}
+						lbl = strings.Join(parts, ", ")
+					} else {
+						lbl = qm.MetricName
+					}
+				}
+				lbl = prettyLabel(lbl)
+
+				if _, ok := series[lbl]; !ok {
+					series[lbl] = &pointSeries{}
+				}
+				series[lbl].times = append(series[lbl].times, ts)
+				series[lbl].vals = append(series[lbl].vals, msg.Value)
 			}
 		}
 
@@ -174,13 +379,56 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		}
 
 		if doneReceived {
-			timeField := data.NewField("Time", nil, timestamps)
-			valueField := data.NewField("Value", nil, values)
-			frame := data.NewFrame(query.RefID, timeField, valueField)
-			frame.RefID = query.RefID
-			frame.Meta = &data.FrameMeta{PreferredVisualization: data.VisTypeGraph}
-			response.Frames = append(response.Frames, frame)
+			for label, s := range series {
+				type pt struct {
+					t time.Time
+					v float64
+				}
+				pts := make([]pt, len(s.times))
+				for i := range s.times {
+					pts[i] = pt{t: s.times[i], v: s.vals[i]}
+				}
+				sort.Slice(pts, func(i, j int) bool { return pts[i].t.Before(pts[j].t) })
 
+				outTimes := make([]time.Time, 0, len(pts))
+				outVals := make([]float64, 0, len(pts))
+				for _, p := range pts {
+					n := len(outTimes)
+					if n > 0 && outTimes[n-1].Equal(p.t) {
+						if isLogsVolume {
+							outVals[n-1] = p.v
+						} else {
+							outVals[n-1] += p.v
+						}
+					} else {
+						outTimes = append(outTimes, p.t)
+						outVals = append(outVals, p.v)
+					}
+				}
+
+				timeField := data.NewField("Time", nil, outTimes)
+				valueField := data.NewField("Value", nil, outVals)
+				valueField.Config = &data.FieldConfig{
+					DisplayNameFromDS: label,
+				}
+				if isLogsVolume {
+					valueField.Config.Custom = map[string]any{
+						"drawStyle":    "bars",
+						"lineWidth":    0,
+						"fillOpacity":  80,
+						"showPoints":   "never",
+						"barAlignment": 0,
+						"stacking": map[string]any{
+							"mode": "normal",
+						},
+					}
+				}
+
+				frame := data.NewFrame(query.RefID, timeField, valueField)
+				frame.RefID = query.RefID
+				frame.Meta = &data.FrameMeta{PreferredVisualization: data.VisTypeGraph}
+				response.Frames = append(response.Frames, frame)
+			}
 			return response
 		}
 	}
