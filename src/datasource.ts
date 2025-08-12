@@ -11,12 +11,14 @@ import {
   toDataFrame,
   DataFrame,
   ScopedVars,
+  MetricFindValue,
+  LegacyMetricFindQueryOptions as VariableQueryOptions,
 } from '@grafana/data';
 import { getTemplateSrv } from '@grafana/runtime';
 import { Observable } from 'rxjs';
 import { MyQuery, MyDataSourceOptions, Filter, TEXT_OPERATORS } from './types';
 import { buildNestedFilter } from './util/buildNestedFilter';
-import { toInternalLabel } from './services/logs';
+import { toInternalLabel, fetchTagKeys, fetchTagValues } from './services/logs';
 
 export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
@@ -30,11 +32,9 @@ export class DataSource
     if (a.length !== b.length) {
       return false;
     }
-
     const normalize = (f: Filter) => `${f.tag}|${f.op}|${(f.value ?? []).join(',')}`;
     const sortedA = [...a].map(normalize).sort();
     const sortedB = [...b].map(normalize).sort();
-
     return sortedA.every((v, i) => v === sortedB[i]);
   }
 
@@ -142,6 +142,102 @@ export class DataSource
       .map((query) => this.getSupplementaryQuery({ type, ...options }, query))
       .filter((q): q is MyQuery => !!q);
     return targets.length ? { ...request, targets } : undefined;
+  }
+
+  private getDefaultRange(): { s: number; e: number } {
+    const e = Date.now();
+    return { s: e - 6 * 60 * 60 * 1000, e }; // last 6h
+  }
+
+  private parseVarQuery(raw: string): {
+    kind: 'keys' | 'values';
+    dataset: 'logs' | 'metrics';
+    key?: string;
+    metricName?: string;
+    metricType?: string;
+  } {
+    const tsrv = getTemplateSrv();
+    const q = tsrv.replace(String(raw ?? ''), undefined as any).trim();
+
+    const ds = /dataset\s*=\s*(logs|metrics)/i.exec(q)?.[1]?.toLowerCase() as 'logs' | 'metrics' | undefined;
+    const dataset = ds ?? 'logs';
+
+    const metricName = /metricName\s*=\s*([^\s,)\]]+)/i.exec(q)?.[1];
+    const metricType = /metricType\s*=\s*([^\s,)\]]+)/i.exec(q)?.[1];
+
+    const valM =
+      /^tag_values\s*\(\s*([^) ,]+).*?\)/i.exec(q) ||
+      /^label_values\s*\(\s*([^) ,]+).*?\)/i.exec(q) ||
+      (/^[A-Za-z0-9_.-]+$/.test(q) ? ([, q] as any) : null);
+
+    if (/^tag_keys\b/i.test(q)) {
+      return { kind: 'keys', dataset, metricName, metricType };
+    }
+    if (valM?.[1]) {
+      return { kind: 'values', dataset, key: valM[1], metricName, metricType };
+    }
+
+    return { kind: 'keys', dataset, metricName, metricType };
+  }
+
+  async metricFindQuery(query: any, options?: VariableQueryOptions): Promise<MetricFindValue[]> {
+    const qstr = typeof query === 'string' ? query : query?.query ?? '';
+    const { kind, dataset, key, metricName, metricType } = this.parseVarQuery(qstr);
+
+    const s = options?.range?.from?.valueOf?.() ?? this.getDefaultRange().s;
+    const e = options?.range?.to?.valueOf?.() ?? this.getDefaultRange().e;
+
+    if (kind === 'keys') {
+      const keys = await fetchTagKeys({
+        datasourceId: this.id,
+        mode: dataset,
+        startTime: s,
+        endTime: e,
+        metricName,
+        metricType,
+      });
+      return keys.map((k) => ({ text: k }));
+    }
+
+    if (!key) {
+      return [];
+    }
+    const vals = await fetchTagValues({
+      datasourceId: this.id,
+      mode: dataset,
+      labelName: key,
+      startTime: s,
+      endTime: e,
+      metricName,
+      metricType,
+    });
+    return vals.map((v) => ({ text: v }));
+  }
+
+  async getTagKeys(options?: any): Promise<MetricFindValue[]> {
+    const s = options?.range?.from?.valueOf?.() ?? this.getDefaultRange().s;
+    const e = options?.range?.to?.valueOf?.() ?? this.getDefaultRange().e;
+    const dataset: 'logs' | 'metrics' = options?.dataset ?? 'logs';
+    const keys = await fetchTagKeys({ datasourceId: this.id, mode: dataset, startTime: s, endTime: e });
+    return keys.map((k) => ({ text: k }));
+  }
+
+  async getTagValues(options: any): Promise<MetricFindValue[]> {
+    const key = options?.key;
+    if (!key) {
+      return [];
+    }
+    const s = options?.range?.from?.valueOf?.() ?? this.getDefaultRange().s;
+    const e = options?.range?.to?.valueOf?.() ?? this.getDefaultRange().e;
+    const dataset: 'logs' | 'metrics' = options?.dataset ?? 'logs';
+    const vals = await fetchTagValues({
+      datasourceId: this.id,
+      mode: dataset,
+      labelName: key,
+      startTime: s,
+      endTime: e,
+    });
+    return vals.map((v) => ({ text: v }));
   }
 
   query(request: DataQueryRequest<MyQuery>): Observable<DataQueryResponse> {
@@ -306,12 +402,6 @@ export class DataSource
       dataset,
       returnResults: true,
       filter: nestedFilter,
-      // chart: {
-      //   aggregation: target.aggregation ?? (isMetrics ? 'max' : 'sum'),
-      //   rollup: target.aggregation ?? (isMetrics ? 'max' : 'sum'),
-      //   groupBys: groupBy,
-      //   type: isMetrics ? 'count' : 'rate',
-      // },
     };
     if (target.extractor && Array.isArray(target.extractor.selections) && Array.isArray(target.extractor.fields)) {
       expression.extract = {
