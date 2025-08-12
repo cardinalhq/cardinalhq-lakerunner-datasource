@@ -72,16 +72,12 @@ export class DataSource
     return {
       ...q,
       metricName: repl(q.metricName),
-      // Template both key and values
       filters: (q.filters ?? []).map((f) => ({
         ...f,
         tag: repl(f.tag) as string,
         value: expandValues(f.op, f.value),
       })),
-      // Template groupBy labels
       groupBy: (q.groupBy ?? []).map((g) => repl(g) as string),
-
-      // leave the rest as-is (no extractor templating per your request)
       queryText: q.queryText,
       metricType: q.metricType,
       chartField: q.chartField,
@@ -153,40 +149,85 @@ export class DataSource
       const controller = new AbortController();
       subscriber.add(() => controller.abort());
 
-      const run = async () => {
-        const allFrames: any[] = [];
+      const templatedTargets = request.targets
+        .filter((t) => !t.hide)
+        .map((t) => this.applyTemplateVariables(t, request.scopedVars ?? ({} as ScopedVars)));
 
-        const templatedTargets = request.targets
-          .filter((t) => !t.hide)
-          .map((t) => this.applyTemplateVariables(t, request.scopedVars ?? ({} as ScopedVars)));
-
-        await Promise.all(
-          templatedTargets.map(async (target) => {
-            try {
-              const frames = await this.runSingleQuery(target, request.range, controller.signal);
-              allFrames.push(...frames);
-            } catch (err) {}
-          })
-        );
-
-        subscriber.next({ data: allFrames });
+      let remaining = templatedTargets.length;
+      if (remaining === 0) {
+        subscriber.next({ data: [] });
         subscriber.complete();
+        return;
+      }
+      const latestByRef: Record<string, DataFrame[]> = {};
+
+      const EMIT_MS = 300;
+      let emitScheduled = false;
+      let emitTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const emitMerged = () => {
+        const merged: DataFrame[] = Object.values(latestByRef).flat();
+        subscriber.next({ data: merged });
       };
 
-      run().catch((err) => {
-        if ((err as any).name === 'AbortError') {
-          subscriber.complete();
-        } else {
-          subscriber.error(err);
+      const scheduleEmit = () => {
+        if (emitScheduled) {
+          return;
+        }
+        emitScheduled = true;
+        emitTimer = setTimeout(() => {
+          emitScheduled = false;
+          emitTimer = null;
+          emitMerged();
+        }, EMIT_MS);
+      };
+      subscriber.add(() => {
+        if (emitTimer) {
+          clearTimeout(emitTimer);
+          emitTimer = null;
         }
       });
+
+      for (const target of templatedTargets) {
+        this.runSingleQuery(target, request.range, controller.signal, (frames: DataFrame[]) => {
+          latestByRef[target.refId] = frames;
+          scheduleEmit();
+        })
+          .then(() => {
+            if (--remaining === 0) {
+              if (emitTimer) {
+                clearTimeout(emitTimer);
+                emitTimer = null;
+                emitScheduled = false;
+              }
+              emitMerged();
+              subscriber.complete();
+            }
+          })
+          .catch((err) => {
+            if ((err as any).name === 'AbortError') {
+              if (--remaining === 0) {
+                if (emitTimer) {
+                  clearTimeout(emitTimer);
+                  emitTimer = null;
+                  emitScheduled = false;
+                }
+                emitMerged();
+                subscriber.complete();
+              }
+            } else {
+              subscriber.error(err);
+            }
+          });
+      }
     });
   }
 
   private async runSingleQuery(
     target: MyQuery,
     range: DataQueryRequest['range'],
-    signal: AbortSignal
+    signal: AbortSignal,
+    emit?: (frames: DataFrame[]) => void
   ): Promise<DataFrame[]> {
     this.resetLogBodyCache(target.refId);
 
@@ -366,7 +407,13 @@ export class DataSource
     let buffer = '';
     const frames: DataFrame[] = [];
 
-    const flushMetricFrames = () => {
+    let lastEmit = 0;
+    const shouldEmit = () => !!emit && (emitCount % 50 === 0 || performance.now() - lastEmit > 250);
+    const didEmit = () => {
+      lastEmit = performance.now();
+    };
+
+    const flushMetricFramesInto = (dst: DataFrame[] = frames) => {
       const levelColors: Record<string, string> = {
         debug: '#C8C8C8',
         info: '#32CD32',
@@ -376,7 +423,6 @@ export class DataSource
 
       for (const [label, series] of Object.entries(frameData)) {
         const ref = target.refId;
-
         const match = /^level=(\w+)$/.exec(label);
         const level = match?.[1];
 
@@ -389,39 +435,35 @@ export class DataSource
           refId: ref,
           name: label,
           fields: [
-            { name: 'Time', type: FieldType.time, values: series.timestamps },
+            { name: 'Time', type: FieldType.time, values: series.timestamps.slice() },
             {
               name: 'Value',
               type: FieldType.number,
-              values: series.values,
+              values: series.values.slice(),
               labels,
               config: {
                 displayNameFromDS: displayName,
-                color: color
-                  ? { mode: 'fixed', fixedColor: color }
-                  : {
-                      mode: 'palette-classic',
-                    },
+                color: color ? { mode: 'fixed', fixedColor: color } : { mode: 'palette-classic' },
               },
             },
           ],
         });
 
-        frame.meta = { preferredVisualisationType: 'graph' };
-        frames.push(frame);
+        (frame.meta as any) = { preferredVisualisationType: 'graph' };
+        dst.push(frame);
       }
     };
 
-    const flushLogFrame = () => {
+    const buildLogsSnapshot = (): DataFrame => {
       const frame = toDataFrame({
         refId: target.refId,
         name: 'logs',
         fields: [
-          { name: 'timestamp', type: FieldType.time, values: timestamps },
-          { name: 'body', type: FieldType.string, values: bodies },
-          { name: 'severity', type: FieldType.string, values: severities },
-          { name: 'id', type: FieldType.string, values: ids },
-          { name: 'labels', type: FieldType.other, values: labelsArr },
+          { name: 'timestamp', type: FieldType.time, values: timestamps.slice() },
+          { name: 'body', type: FieldType.string, values: bodies.slice() },
+          { name: 'severity', type: FieldType.string, values: severities.slice() },
+          { name: 'id', type: FieldType.string, values: ids.slice() },
+          { name: 'labels', type: FieldType.other, values: labelsArr.slice() },
         ],
       });
       frame.meta = {
@@ -429,7 +471,15 @@ export class DataSource
         preferredVisualisationType: 'logs',
         custom: { limit: 1000 },
       };
+      return frame;
+    };
 
+    const flushMetricFrames = () => {
+      flushMetricFramesInto(frames);
+    };
+
+    const flushLogFrame = () => {
+      const frame = buildLogsSnapshot();
       frames.push(frame);
     };
 
@@ -466,6 +516,7 @@ export class DataSource
               const ts = msg.timestamp;
               frameData[label].timestamps.push(ts);
               frameData[label].values.push(value);
+              emitCount++;
             }
           } else if (isMetrics) {
             const ts = msg.timestamp;
@@ -557,7 +608,21 @@ export class DataSource
               };
 
               frames.push(frame);
+              if (emit) {
+                emit([frame]);
+              }
             }
+          }
+          if (shouldEmit()) {
+            const batch: DataFrame[] = [];
+            flushMetricFramesInto(batch);
+            if (!isMetrics && totalLogs > 0 && totalLogs <= MAX_INITIAL) {
+              batch.push(buildLogsSnapshot());
+            }
+            if (batch.length) {
+              emit!(batch);
+            }
+            didEmit();
           }
         } catch (err) {}
       }
@@ -572,6 +637,10 @@ export class DataSource
       if (totalLogs > 0 && totalLogs <= MAX_INITIAL) {
         flushLogFrame();
       }
+    }
+
+    if (emit && frames.length) {
+      emit(frames);
     }
 
     return frames;
