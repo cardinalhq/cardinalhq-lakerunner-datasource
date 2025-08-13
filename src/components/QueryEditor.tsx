@@ -112,7 +112,7 @@ export function QueryEditor({
       setIsWaiting,
     })
       .then((metrics) => {
-        setMetricOptions(metrics);
+        setMetricOptions(metrics.sort((a, b) => a.metricName.localeCompare(b.metricName)));
         hasLoadedMetrics.current = true;
       })
       .catch(() => {});
@@ -166,30 +166,33 @@ export function QueryEditor({
         </div>
       )}
 
-      <TabsBar>
-        {['logs', 'metrics'].map((mode) => (
-          <Tab
-            key={mode}
-            label={mode.charAt(0).toUpperCase() + mode.slice(1)}
-            active={(query.mode ?? 'logs') === mode}
-            onChangeTab={() =>
-              onChange({
-                ...query,
-                mode: mode as 'logs' | 'metrics',
-                filters: [{ tag: '', op: '=' as Operator, value: [''] }],
-                groupBy: [],
-                metricName: undefined,
-                metricType: undefined,
-              })
-            }
-          />
-        ))}
-      </TabsBar>
+      <div style={{ marginBottom: 8 }}>
+        <TabsBar>
+          {['logs', 'metrics'].map((mode) => (
+            <Tab
+              key={mode}
+              label={mode.charAt(0).toUpperCase() + mode.slice(1)}
+              active={(query.mode ?? 'logs') === mode}
+              onChangeTab={() =>
+                onChange({
+                  ...query,
+                  mode: mode as 'logs' | 'metrics',
+                  filters: [{ tag: '', op: '=' as Operator, value: [''] }],
+                  groupBy: [],
+                  metricName: undefined,
+                  metricType: undefined,
+                })
+              }
+            />
+          ))}
+        </TabsBar>
+      </div>
 
       {isMetricsMode && (
         <InlineFieldRow>
           <InlineField label="Metric Name">
             <Select
+              placeholder="Select a metric"
               options={metricOptions.map((m) => ({ label: m.metricName, value: m.metricName }))}
               value={query.metricName ? { label: query.metricName, value: query.metricName } : null}
               allowCustomValue
@@ -203,7 +206,6 @@ export function QueryEditor({
                 }
               }}
               width={40}
-              placeholder=""
             />
           </InlineField>
         </InlineFieldRow>

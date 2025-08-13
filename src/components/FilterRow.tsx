@@ -142,7 +142,7 @@ export const FilterRow = ({
                 value: [''],
               });
             }}
-            placeholder="Tag name"
+            placeholder="Select a tag"
             isLoading={loadingGroupByLabels}
           />
         </InlineField>
@@ -157,7 +157,6 @@ export const FilterRow = ({
               const selectedOp = v?.value as Operator;
               updateFilter(index, { op: selectedOp, value: [''] });
             }}
-            placeholder="Op"
             disabled={!filter.tag}
           />
         </InlineField>
@@ -215,6 +214,7 @@ export const FilterRow = ({
             title="Remove filter"
             aria-label="Remove filter"
             onClick={() => removeFilter(index)}
+            style={{ marginTop: 6 }}
           />
         </InlineField>
 
@@ -231,7 +231,7 @@ export const FilterRow = ({
         <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
           <InlineField label="Group by">
             <Select
-              placeholder="Group by"
+              placeholder="Select tags"
               options={groupByOptions}
               value={groupBy.map((g) => ({ label: g, value: g }))}
               allowCustomValue
