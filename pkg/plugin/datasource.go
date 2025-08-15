@@ -522,7 +522,6 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 	buf := make([]byte, 64*1024)
 
 	scaleUpWaiting := []byte(`{"type":"waiting_scale_up"}`)
-	scaleUpDone := []byte(`{"type":"done"}`)
 
 	for {
 		n, rerr := resp.Body.Read(buf)
@@ -533,12 +532,6 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 				_ = sender.Send(&backend.CallResourceResponse{
 					Status: 200, Body: scaleUpWaiting,
 					Headers: map[string][]string{"X-Event-Type": {"scale-up-waiting"}},
-				})
-			}
-			if bytes.Contains(chunk, []byte(`"type":"done"`)) {
-				_ = sender.Send(&backend.CallResourceResponse{
-					Status: 200, Body: scaleUpDone,
-					Headers: map[string][]string{"X-Event-Type": {"scale-up-done"}},
 				})
 			}
 
