@@ -465,112 +465,118 @@ var CallResourceHandler = backend.CallResourceHandlerFunc(func(ctx context.Conte
 	}
 })
 
+// Shared http.Client with pooled connections to reduce handshake/TCB churn across calls
+var httpClient = &http.Client{
+	Transport: &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DisableCompression:    true, // don't auto-gzip-decompress SSE
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     true,
+	},
+}
+
 func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	config, err := models.LoadPluginSettings(*req.PluginContext.DataSourceInstanceSettings)
 	if err != nil {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: http.StatusInternalServerError,
-			Body:   []byte("Failed to load plugin settings"),
-		})
+		return sender.Send(&backend.CallResourceResponse{Status: http.StatusInternalServerError, Body: []byte("Failed to load plugin settings")})
 	}
 
 	var incoming struct {
-		Path string      `json:"path"`
-		Body interface{} `json:"body"`
+		Path string          `json:"path"`
+		Body json.RawMessage `json:"body"`
 	}
 	if err := json.Unmarshal(req.Body, &incoming); err != nil {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: http.StatusBadRequest,
-			Body:   []byte("Invalid request body"),
-		})
+		return sender.Send(&backend.CallResourceResponse{Status: http.StatusBadRequest, Body: []byte("Invalid request body")})
 	}
 
 	fullURL := strings.TrimRight(config.JsonData.CustomPath, "/") + incoming.Path
 
-	method := http.MethodPost
 	var bodyReader io.Reader
-	if incoming.Body == nil {
-		bodyReader = nil
-	} else {
-		bodyBytes, _ := json.Marshal(incoming.Body)
-		bodyReader = bytes.NewReader(bodyBytes)
+	if len(incoming.Body) > 0 && string(incoming.Body) != "null" {
+		bodyReader = bytes.NewReader(incoming.Body)
 	}
 
-	httpReq, _ := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bodyReader)
+	if err != nil {
+		return sender.Send(&backend.CallResourceResponse{Status: http.StatusBadGateway, Body: []byte("Failed to build request")})
+	}
 	httpReq.Header.Set("api-key", config.Secrets.ApiKey)
-	if method == http.MethodPost {
+	httpReq.Header.Set("Accept", "text/event-stream")
+	httpReq.Header.Set("Accept-Encoding", "identity") // avoid gzip for SSE
+	if bodyReader != nil {
 		httpReq.Header.Set("Content-Type", "application/json")
 	}
+	httpReq.Header.Set("Cache-Control", "no-cache")
+	httpReq.Header.Set("Connection", "keep-alive")
 
-	httpReq.Header.Set("Accept", "text/event-stream")
-
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := httpClient.Do(httpReq)
 	if err != nil {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: http.StatusBadGateway,
-			Body:   []byte(fmt.Sprintf("Request failed: %v", err)),
-		})
+		return sender.Send(&backend.CallResourceResponse{Status: http.StatusBadGateway, Body: []byte(fmt.Sprintf("Request failed: %v", err))})
 	}
 	defer resp.Body.Close()
 
 	first := true
-	buf := make([]byte, 32*1024)
+	buf := make([]byte, 64*1024)
+
+	scaleUpWaiting := []byte(`{"type":"waiting_scale_up"}`)
+	scaleUpDone := []byte(`{"type":"done"}`)
+
 	for {
-		n, err := resp.Body.Read(buf)
+		n, rerr := resp.Body.Read(buf)
 		if n > 0 {
 			chunk := buf[:n]
-			var parsed map[string]interface{}
-			if jsonErr := json.Unmarshal(chunk, &parsed); jsonErr == nil {
-				if msgType, ok := parsed["type"].(string); ok {
-					switch msgType {
-					case "waiting_scale_up":
-						signal := map[string]string{"type": "waiting_scale_up"}
-						signalBytes, _ := json.Marshal(signal)
-						_ = sender.Send(&backend.CallResourceResponse{
-							Status: 200,
-							Body:   signalBytes,
-							Headers: map[string][]string{
-								"X-Event-Type": {"scale-up-waiting"},
-							},
-						})
-						continue
-					case "done":
-						signal := map[string]string{"type": "done"}
-						signalBytes, _ := json.Marshal(signal)
-						_ = sender.Send(&backend.CallResourceResponse{
-							Status: 200,
-							Body:   signalBytes,
-							Headers: map[string][]string{
-								"X-Event-Type": {"scale-up-done"},
-							},
-						})
-						continue
-					}
-				}
+
+			if bytes.Contains(chunk, []byte(`"type":"waiting_scale_up"`)) {
+				_ = sender.Send(&backend.CallResourceResponse{
+					Status: 200, Body: scaleUpWaiting,
+					Headers: map[string][]string{"X-Event-Type": {"scale-up-waiting"}},
+				})
+			}
+			if bytes.Contains(chunk, []byte(`"type":"done"`)) {
+				_ = sender.Send(&backend.CallResourceResponse{
+					Status: 200, Body: scaleUpDone,
+					Headers: map[string][]string{"X-Event-Type": {"scale-up-done"}},
+				})
 			}
 
 			out := &backend.CallResourceResponse{
 				Status: resp.StatusCode,
-				Body:   append([]byte(nil), chunk...),
+				Body:   chunk,
 			}
 			if first {
-				out.Headers = map[string][]string{
-					"Content-Type": resp.Header.Values("Content-Type"),
+				h := map[string][]string{}
+				if v := resp.Header.Values("Content-Type"); len(v) > 0 {
+					h["Content-Type"] = v
 				}
+				if v := resp.Header.Values("Cache-Control"); len(v) > 0 {
+					h["Cache-Control"] = v
+				}
+				if v := resp.Header.Values("Connection"); len(v) > 0 {
+					h["Connection"] = v
+				}
+				if v := resp.Header.Values("Transfer-Encoding"); len(v) > 0 {
+					h["Transfer-Encoding"] = v
+				}
+				if v := resp.Header.Values("Content-Encoding"); len(v) > 0 {
+					h["Content-Encoding"] = v
+				}
+				out.Headers = h
 				first = false
 			}
 			if sendErr := sender.Send(out); sendErr != nil {
 				return sendErr
 			}
 		}
-		if err != nil {
-			if err == io.EOF {
+		if rerr != nil {
+			if rerr == io.EOF {
 				break
 			}
-
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
-				Body:   []byte(fmt.Sprintf("stream interrupted: %v", err)),
+				Body:   []byte(fmt.Sprintf("stream interrupted: %v", rerr)),
 			})
 		}
 	}

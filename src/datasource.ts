@@ -257,7 +257,7 @@ export class DataSource
       }
       const latestByRef: Record<string, DataFrame[]> = {};
 
-      const EMIT_MS = 300;
+      const EMIT_MS = 0;
       let emitScheduled = false;
       let emitTimer: ReturnType<typeof setTimeout> | null = null;
 
