@@ -8,7 +8,7 @@ interface UseLabelsProps {
   datasource: DataSource;
   enabled: boolean;
   filters?: Filter[];
-  mode?: 'logs' | 'metrics';
+  mode?: 'logs' | 'metrics' | 'promQL';
   metricName?: string;
   metricType?: string;
   startTime?: number;

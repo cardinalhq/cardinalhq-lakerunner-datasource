@@ -37,9 +37,16 @@ export class DataSource
     const sortedB = [...b].map(normalize).sort();
     return sortedA.every((v, i) => v === sortedB[i]);
   }
-
+  private readonly instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>;
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
     super(instanceSettings);
+    this.instanceSettings = instanceSettings;
+  }
+  public isAdvancedEnabled(): boolean {
+    return Boolean(this.instanceSettings.jsonData?.enableAdvancedTab && this.instanceSettings.jsonData.promqlPath);
+  }
+  public getPromqlPath(): string {
+    return String(this.instanceSettings.jsonData?.promqlPath ?? '');
   }
 
   private applyTemplateVariables(q: MyQuery, scopedVars: ScopedVars): MyQuery {

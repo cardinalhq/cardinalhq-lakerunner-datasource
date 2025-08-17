@@ -39,15 +39,19 @@ export interface MyQuery extends DataQuery {
   groupBy?: string[];
   queryText?: string;
   constant?: number;
-  mode?: 'logs' | 'metrics';
+  mode?: 'logs' | 'metrics' | 'promQL';
   metricName?: string;
   metricType?: 'gauge' | 'rate' | 'histogram';
   timeFrom?: number;
   timeTo?: number;
   chartAggregation?: ChartAggregation;
   aggregation?: Aggregation;
+  promqlModel?: string;
+  promqlDescription?: string;
+  promqlOutput?: string;
   selectedExemplar?: string | null;
   chartField?: string;
+  promqlSubTab?: 'builder' | 'AI Assistant';
   extractor?: {
     regex: string;
     fields: string[];
@@ -76,6 +80,8 @@ export interface DataSourceResponse {
 
 export interface MyDataSourceOptions extends DataSourceJsonData {
   customPath?: string;
+  promqlPath?: string;
+  enableAdvancedTab?: boolean;
 }
 
 export interface MySecureJsonData {

@@ -117,7 +117,7 @@ export async function fetchTagKeys({
   setIsWaiting,
 }: {
   datasourceId: number;
-  mode?: 'logs' | 'metrics';
+  mode?: 'logs' | 'metrics' | 'promQL';
   useRelativeTime?: boolean;
   startTime?: number;
   endTime?: number;
@@ -224,7 +224,7 @@ export async function fetchTagValues({
   setIsWaiting,
 }: {
   datasourceId: number;
-  mode?: 'logs' | 'metrics';
+  mode?: 'logs' | 'metrics' | 'promQL';
   metricName?: string;
   metricType?: string;
   labelName: string;

@@ -9,7 +9,7 @@ interface UseLabelValuesProps {
   labelName: string;
   enabled: boolean;
   filters?: Filter[];
-  mode?: 'logs' | 'metrics';
+  mode?: 'logs' | 'metrics' | 'promQL';
   metricName?: string;
   metricType?: string;
   startTime?: number;

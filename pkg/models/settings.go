@@ -10,6 +10,7 @@ import (
 type PluginSettings struct {
 	JsonData struct {
 		CustomPath string `json:"customPath"`
+		PromQLPath string `json:"promqlPath"`
 	} `json:"jsonData"`
 	Secrets *SecretPluginSettings `json:"-"`
 }

@@ -455,7 +455,7 @@ func (d *Datasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequ
 
 var CallResourceHandler = backend.CallResourceHandlerFunc(func(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	switch req.Path {
-	case "proxy-query", "proxy-stream":
+	case "proxy-query", "proxy-stream", "proxy-promql":
 		return handleProxyRequest(ctx, req, sender)
 	default:
 		return sender.Send(&backend.CallResourceResponse{
@@ -491,8 +491,14 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 	if err := json.Unmarshal(req.Body, &incoming); err != nil {
 		return sender.Send(&backend.CallResourceResponse{Status: http.StatusBadRequest, Body: []byte("Invalid request body")})
 	}
+	var basePath string
+	if req.Path == "proxy-promql" && config.JsonData.PromQLPath != "" {
+		basePath = config.JsonData.PromQLPath
+	} else {
+		basePath = config.JsonData.CustomPath
+	}
 
-	fullURL := strings.TrimRight(config.JsonData.CustomPath, "/") + incoming.Path
+	fullURL := strings.TrimRight(basePath, "/") + incoming.Path
 
 	var bodyReader io.Reader
 	if len(incoming.Body) > 0 && string(incoming.Body) != "null" {

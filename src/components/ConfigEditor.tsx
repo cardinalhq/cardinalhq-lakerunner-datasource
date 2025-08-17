@@ -1,5 +1,5 @@
 import React, { ChangeEvent } from 'react';
-import { InlineField, Input, SecretInput } from '@grafana/ui';
+import { InlineField, InlineSwitch, Input, SecretInput } from '@grafana/ui';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import { MyDataSourceOptions, MySecureJsonData } from '../types';
 
@@ -9,12 +9,30 @@ export function ConfigEditor(props: Props) {
   const { options, onOptionsChange } = props;
   const { jsonData, secureJsonData = {}, secureJsonFields = {} } = options;
 
+  const onToggleAdvancedTab = (v: boolean) => {
+    onOptionsChange({
+      ...options,
+      jsonData: {
+        ...options.jsonData,
+        enableAdvancedTab: v,
+      },
+    });
+  };
   const onPathChange = (e: ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({
       ...options,
       jsonData: {
         ...jsonData,
         customPath: e.target.value,
+      },
+    });
+  };
+  const onPromqlChange = (e: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({
+      ...options,
+      jsonData: {
+        ...jsonData,
+        promqlPath: e.target.value,
       },
     });
   };
@@ -65,6 +83,23 @@ export function ConfigEditor(props: Props) {
           width={40}
         />
       </InlineField>
+      <InlineField label="Enable Experimental PromQL" tooltip="Show the promql tab in the query editor">
+        <InlineSwitch
+          value={options.jsonData.enableAdvancedTab || false}
+          onChange={(e) => onToggleAdvancedTab(e.currentTarget.checked)}
+        />
+      </InlineField>
+      {options.jsonData.enableAdvancedTab && (
+        <InlineField label="PromQL Path" labelWidth={18} tooltip="PromQL path">
+          <Input
+            id="config-editor-path-promql"
+            value={jsonData.promqlPath || ''}
+            onChange={onPromqlChange}
+            placeholder="e.g. https://your-api.com"
+            width={40}
+          />
+        </InlineField>
+      )}
     </>
   );
 }

@@ -30,3 +30,5 @@ services:
       GF_DATAPROXY_LOGGING: 1
       GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: cardinalhq-lakerunner-datasource
       GF_SECURITY_ALLOW_EMBEDDING: true
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
