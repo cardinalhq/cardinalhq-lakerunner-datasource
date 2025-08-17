@@ -76,7 +76,7 @@ export function QueryEditor({
     }
   }, [onChange, query, showPromql]);
   type Mode = 'logs' | 'metrics' | 'promQL';
-  const promqlSubTab: 'builder' | 'AI Assistant' = query.promqlSubTab ?? 'builder';
+  const promqlSubTab: 'builder' | 'AI-assisted' = query.promqlSubTab ?? 'builder';
   const isPromqlMode = showPromql && (query.mode ?? 'logs') === 'promQL';
   const isMetricsMode = query.mode === 'metrics' || (isPromqlMode && promqlSubTab === 'builder');
 
@@ -240,30 +240,34 @@ export function QueryEditor({
           <div style={{ marginTop: 8, fontWeight: 'bold' }}>Waiting for scale-up...</div>
         </div>
       )}
-      <TabsBar>
-        {tabModes.map((mode) => (
-          <Tab
-            key={mode}
-            label={mode.charAt(0).toUpperCase() + mode.slice(1)}
-            active={(query.mode ?? 'logs') === mode}
-            onChangeTab={() => {
-              if (mode === 'promQL' && !showPromql) {
-                return;
-              }
-              const targetMode = mode;
-              const wantDefaultFilter = targetMode !== 'promQL' || promqlSubTab === 'builder';
-              onChange({
-                ...query,
-                mode: targetMode,
-                filters: wantDefaultFilter ? [{ tag: '', op: '=' as Operator, value: [''] }] : [],
-                groupBy: [],
-                metricName: undefined,
-                metricType: undefined,
-              });
-            }}
-          />
-        ))}
-      </TabsBar>
+
+      <div style={{ marginBottom: 8 }}>
+        <TabsBar>
+          {tabModes.map((mode) => (
+            <Tab
+              key={mode}
+              label={mode.charAt(0).toUpperCase() + mode.slice(1)}
+              active={(query.mode ?? 'logs') === mode}
+              onChangeTab={() => {
+                if (mode === 'promQL' && !showPromql) {
+                  return;
+                }
+                const targetMode = mode;
+                const wantDefaultFilter = targetMode !== 'promQL' || promqlSubTab === 'builder';
+                onChange({
+                  ...query,
+                  mode: targetMode,
+                  filters: wantDefaultFilter ? [{ tag: '', op: '=' as Operator, value: [''] }] : [],
+                  groupBy: [],
+                  metricName: undefined,
+                  metricType: undefined,
+                });
+              }}
+            />
+          ))}
+        </TabsBar>
+      </div>
+
       {isMetricsMode && !isPromqlMode && (
         <InlineFieldRow>
           <InlineField label="Metric Name">
@@ -393,33 +397,22 @@ export function QueryEditor({
 
       {isPromqlMode && (
         <div>
-          <div
-            className={css({
-              display: 'flex',
-              justifyContent: 'flex-end',
-            })}
-          >
-            <div
-              className={css({
-                background: 'var(--background-secondary, #black)',
-              })}
-            >
-              <TabsBar>
-                {(['builder', 'AI Assistant'] as const).map((sub) => (
-                  <Tab
-                    key={sub}
-                    label={sub.charAt(0).toUpperCase() + sub.slice(1)}
-                    active={(query.promqlSubTab ?? 'builder') === sub}
-                    onChangeTab={() => {
-                      if (sub === 'builder') {
-                        setPromqlDirty(false);
-                      }
-                      onChange({ ...query, promqlSubTab: sub });
-                    }}
-                  />
-                ))}
-              </TabsBar>
-            </div>
+          <div style={{ marginTop: -8, marginBottom: 8 }}>
+            <TabsBar>
+              {(['builder', 'AI-assisted'] as const).map((sub) => (
+                <Tab
+                  key={sub}
+                  label={sub.charAt(0).toUpperCase() + sub.slice(1)}
+                  active={(query.promqlSubTab ?? 'builder') === sub}
+                  onChangeTab={() => {
+                    if (sub === 'builder') {
+                      setPromqlDirty(false);
+                    }
+                    onChange({ ...query, promqlSubTab: sub });
+                  }}
+                />
+              ))}
+            </TabsBar>
           </div>
 
           {promqlSubTab === 'builder' ? (

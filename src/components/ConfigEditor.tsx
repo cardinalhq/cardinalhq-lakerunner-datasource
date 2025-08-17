@@ -63,7 +63,7 @@ export function ConfigEditor(props: Props) {
 
   return (
     <>
-      <InlineField label="Path" labelWidth={14} tooltip="Base URL or custom path">
+      <InlineField label="Query API Root">
         <Input
           id="config-editor-path"
           value={jsonData.customPath || ''}
@@ -73,7 +73,7 @@ export function ConfigEditor(props: Props) {
         />
       </InlineField>
 
-      <InlineField label="API Key" labelWidth={14} tooltip="Your CardinalHQ API key">
+      <InlineField label="API Key">
         <SecretInput
           isConfigured={secureJsonFields.apiKey === true}
           value={secureJsonData.apiKey || ''}
@@ -83,23 +83,26 @@ export function ConfigEditor(props: Props) {
           width={40}
         />
       </InlineField>
-      <InlineField label="Enable Experimental PromQL" tooltip="Show the promql tab in the query editor">
-        <InlineSwitch
-          value={options.jsonData.enableAdvancedTab || false}
-          onChange={(e) => onToggleAdvancedTab(e.currentTarget.checked)}
-        />
-      </InlineField>
-      {options.jsonData.enableAdvancedTab && (
-        <InlineField label="PromQL Path" labelWidth={18} tooltip="PromQL path">
-          <Input
-            id="config-editor-path-promql"
-            value={jsonData.promqlPath || ''}
-            onChange={onPromqlChange}
-            placeholder="e.g. https://your-api.com"
-            width={40}
+
+      <div style={{ marginTop: 18 }}>
+        <InlineField label="Enable experimental PromQL support">
+          <InlineSwitch
+            value={options.jsonData.enableAdvancedTab || false}
+            onChange={(e) => onToggleAdvancedTab(e.currentTarget.checked)}
           />
         </InlineField>
-      )}
+        {options.jsonData.enableAdvancedTab && (
+          <InlineField label="PromQL API Root">
+            <Input
+              id="config-editor-path-promql"
+              value={jsonData.promqlPath || ''}
+              onChange={onPromqlChange}
+              placeholder="e.g. https://your-api.com"
+              width={40}
+            />
+          </InlineField>
+        )}
+      </div>
     </>
   );
 }

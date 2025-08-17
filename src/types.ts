@@ -51,7 +51,7 @@ export interface MyQuery extends DataQuery {
   promqlOutput?: string;
   selectedExemplar?: string | null;
   chartField?: string;
-  promqlSubTab?: 'builder' | 'AI Assistant';
+  promqlSubTab?: 'builder' | 'AI-assisted';
   extractor?: {
     regex: string;
     fields: string[];
