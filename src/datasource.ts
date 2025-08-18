@@ -49,6 +49,10 @@ export class DataSource
     return String(this.instanceSettings.jsonData?.promqlPath ?? '');
   }
 
+  public isTracesEnabled(): boolean {
+    return Boolean(this.instanceSettings.jsonData?.enableTraces);
+  }
+
   private applyTemplateVariables(q: MyQuery, scopedVars: ScopedVars): MyQuery {
     const tsrv = getTemplateSrv();
     const repl = (v?: string, fmt?: string) => (v == null ? v : tsrv.replace(v, scopedVars, fmt));

@@ -61,6 +61,16 @@ export function ConfigEditor(props: Props) {
     });
   };
 
+  const onToggleTraces = (v: boolean) => {
+    onOptionsChange({
+      ...options,
+      jsonData: {
+        ...jsonData,
+        enableTraces: v,
+      },
+    });
+  };
+
   return (
     <>
       <InlineField label="Query API Root">
@@ -84,8 +94,17 @@ export function ConfigEditor(props: Props) {
         />
       </InlineField>
 
-      <div style={{ marginTop: 18 }}>
-        <InlineField label="Enable experimental PromQL support">
+      <div style={{ marginTop: 16 }}>
+        <InlineField label="Experimental Traces support">
+          <InlineSwitch
+            value={options.jsonData.enableTraces || false}
+            onChange={(e) => onToggleTraces(e.currentTarget.checked)}
+          />
+        </InlineField>
+      </div>
+
+      <div style={{ marginTop: 8 }}>
+        <InlineField label="Experimental PromQL support">
           <InlineSwitch
             value={options.jsonData.enableAdvancedTab || false}
             onChange={(e) => onToggleAdvancedTab(e.currentTarget.checked)}

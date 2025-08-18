@@ -43,6 +43,7 @@ export function QueryEditor({
   range,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
   const showPromql = datasource.isAdvancedEnabled();
+  const showTraces = datasource.isTracesEnabled();
   const [isWaiting, setIsWaiting] = useState(false);
   const [selectedExemplar, setSelectedExemplar] = useState<string | null>(query.selectedExemplar ?? null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,10 +76,11 @@ export function QueryEditor({
       onChange({ ...query, mode: 'logs' });
     }
   }, [onChange, query, showPromql]);
-  type Mode = 'logs' | 'metrics' | 'promQL';
+  type Mode = 'logs' | 'metrics' | 'promQL' | 'traces';
   const promqlSubTab: 'builder' | 'AI-assisted' = query.promqlSubTab ?? 'builder';
   const isPromqlMode = showPromql && (query.mode ?? 'logs') === 'promQL';
   const isMetricsMode = query.mode === 'metrics' || (isPromqlMode && promqlSubTab === 'builder');
+  const isTracesMode = query.mode === 'traces';
 
   useEffect(() => {
     if (previousFiltersRef.current.length === 0 && filters.length > 0) {
@@ -218,7 +220,18 @@ export function QueryEditor({
       prevBuilderRef.current = promqlPreview || '';
     }
   }, [query.mode, query.promqlSubTab, promqlPreview, promqlDirty]);
-  const tabModes: Mode[] = showPromql ? ['logs', 'metrics', 'promQL'] : ['logs', 'metrics'];
+
+  const availableTabs = useMemo<Mode[]>(() => {
+    const tabs: Mode[] = ['logs', 'metrics'];
+    if (showPromql) {
+      tabs.push('promQL');
+    }
+    if (showTraces) {
+      tabs.push('traces');
+    }
+    return tabs;
+  }, [showPromql, showTraces]);
+
   return (
     <div style={{ position: 'relative' }}>
       {isWaiting && (
@@ -243,7 +256,7 @@ export function QueryEditor({
 
       <div style={{ marginBottom: 8 }}>
         <TabsBar>
-          {tabModes.map((mode) => (
+          {availableTabs.map((mode) => (
             <Tab
               key={mode}
               label={mode.charAt(0).toUpperCase() + mode.slice(1)}
@@ -325,7 +338,7 @@ export function QueryEditor({
           />
         ))}
 
-      {!isMetricsMode && !isPromqlMode && (
+      {!isMetricsMode && !isPromqlMode && !isTracesMode && (
         <Collapse
           label={
             <div className={css({ display: 'flex', alignItems: 'center', gap: 8 })}>

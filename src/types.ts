@@ -39,7 +39,7 @@ export interface MyQuery extends DataQuery {
   groupBy?: string[];
   queryText?: string;
   constant?: number;
-  mode?: 'logs' | 'metrics' | 'promQL';
+  mode?: 'logs' | 'metrics' | 'promQL' | 'traces';
   metricName?: string;
   metricType?: 'gauge' | 'rate' | 'histogram';
   timeFrom?: number;
@@ -82,6 +82,7 @@ export interface MyDataSourceOptions extends DataSourceJsonData {
   customPath?: string;
   promqlPath?: string;
   enableAdvancedTab?: boolean;
+  enableTraces?: boolean;
 }
 
 export interface MySecureJsonData {

@@ -18,7 +18,7 @@ interface FilterRowProps {
   updateGroupBy: (labels: string[]) => void;
   groupBy: string[];
   onRunQuery: () => void;
-  mode?: 'logs' | 'metrics' | 'promQL';
+  mode?: 'logs' | 'metrics' | 'promQL' | 'traces';
   metricName?: string;
   metricType?: string;
   aggregation?: string;
@@ -47,6 +47,8 @@ export const FilterRow = ({
   setIsWaiting,
 }: FilterRowProps) => {
   const isMetricsMode = mode === 'metrics';
+  const isTracesMode = mode === 'traces';
+
   const isLast = index === filters.length - 1;
   const isTextOperator = TEXT_OPERATORS.includes(filter.op);
   const isMultiValueOperator = filter.op === 'in' || filter.op === 'not_in';
@@ -227,7 +229,7 @@ export const FilterRow = ({
       </InlineFieldRow>
 
       {/* Group By + Aggregation */}
-      {isLast && (
+      {isLast && !isTracesMode && (
         <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
           <InlineField label="Group by">
             <Select
