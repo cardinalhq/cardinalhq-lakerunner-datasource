@@ -450,7 +450,7 @@ export class DataSource
         aggregation: normalAggregation,
         rollup: normalAggregation,
         groupBys: groupBy,
-        type: 'rate',
+        type: 'count',
       };
     } else if (hasNumericChartField) {
       const selected = target.extractor!.selections.find(

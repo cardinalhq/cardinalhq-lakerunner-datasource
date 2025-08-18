@@ -239,7 +239,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	dataset := "metrics"
 	if isLogsVolume {
 		dataset = "logs"
-		chart["type"] = "rate"
+		chart["type"] = "count"
 	} else {
 		chart["type"] = "count"
 	}
