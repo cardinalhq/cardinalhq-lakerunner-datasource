@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { fetchTagValues } from 'services/logs';
+import { truncateTo1Min } from 'util/QueryUtils';
 import type { DataSource } from '../datasource';
 import type { Filter } from '../types';
-import { truncateTo1Min } from 'util/QueryUtils';
 
 interface UseLabelValuesProps {
   datasource: DataSource;
@@ -46,11 +47,9 @@ export function useLabelValues({
     truncateTo1Min(endTime),
   ];
 
-  const {
-    data = [],
-    isLoading,
-    error,
-  } = useQuery<string[], Error>({
+  const [labelValues, setLabelValues] = useState<string[]>([]);
+
+  const { isLoading, error } = useQuery<string[], Error>({
     queryKey,
     queryFn: ({ signal }) =>
       fetchTagValues({
@@ -65,11 +64,12 @@ export function useLabelValues({
         startTime,
         endTime,
         setIsWaiting,
+        onData: setLabelValues,
       }),
     enabled: shouldRun,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
-  return { data, isLoading, error };
+  return { data: labelValues, isLoading, error };
 }

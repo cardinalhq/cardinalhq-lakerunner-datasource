@@ -115,6 +115,7 @@ export async function fetchTagKeys({
   metricType,
   signal,
   setIsWaiting,
+  onData,
 }: {
   datasourceId: number;
   mode?: 'logs' | 'metrics' | 'promQL' | 'traces';
@@ -126,6 +127,7 @@ export async function fetchTagKeys({
   metricType?: string;
   signal?: AbortSignal;
   setIsWaiting?: (isWaiting: boolean) => void;
+  onData?: (data: string[]) => void;
 }): Promise<string[]> {
   const keys = new Set<string>();
   const path = `/api/v1/tags/${mode}?s=${startTime}&e=${endTime}`;
@@ -202,6 +204,9 @@ export async function fetchTagKeys({
             keys.add(k);
           }
         });
+        if (onData) {
+          onData(Array.from(keys));
+        }
       }
     },
     signal,
@@ -222,6 +227,7 @@ export async function fetchTagValues({
   startTime,
   endTime,
   setIsWaiting,
+  onData,
 }: {
   datasourceId: number;
   mode?: 'logs' | 'metrics' | 'promQL' | 'traces';
@@ -234,6 +240,7 @@ export async function fetchTagValues({
   startTime?: number;
   endTime?: number;
   setIsWaiting?: (isWaiting: boolean) => void;
+  onData?: (data: string[]) => void;
 }): Promise<string[]> {
   if (!labelName) {
     throw new Error('labelName is required');
@@ -317,6 +324,9 @@ export async function fetchTagValues({
       const value = msg?.[internalLabel];
       if (value !== undefined && value !== null) {
         vals.add(String(value));
+        if (onData) {
+          onData(Array.from(vals));
+        }
       }
     },
     signal,

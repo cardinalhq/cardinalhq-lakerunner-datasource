@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { fetchTagKeys } from 'services/logs';
 import { truncateTo1Min } from 'util/QueryUtils';
 import type { DataSource } from '../datasource';
@@ -38,7 +39,9 @@ export function useLabels({
   ] as const;
   const shouldRun = enabled && !!datasource?.id;
 
-  const { data = [], isLoading } = useQuery<string[], Error>({
+  const [labels, setLabels] = useState<string[]>([]);
+
+  const { isLoading } = useQuery<string[], Error>({
     queryKey,
     queryFn: ({ signal }) => {
       return fetchTagKeys({
@@ -52,6 +55,7 @@ export function useLabels({
         metricName,
         metricType,
         setIsWaiting,
+        onData: setLabels,
       });
     },
     enabled: shouldRun,
@@ -61,5 +65,5 @@ export function useLabels({
     refetchOnReconnect: false,
   });
 
-  return { data, isLoading };
+  return { data: labels, isLoading };
 }
