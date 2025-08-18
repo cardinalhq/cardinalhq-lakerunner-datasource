@@ -4,7 +4,7 @@
   "id": "cardinalhq-lakerunner-datasource",
   "metrics": true,
   "logs": true,
-  "traces": true,
+  "tracing": true,
   "backend": true,
   "executable": "gpx_cardinalhq_datasource",
   "info": {
