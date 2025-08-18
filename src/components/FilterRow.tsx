@@ -52,14 +52,10 @@ export const FilterRow = ({
   const isLast = index === filters.length - 1;
   const isTextOperator = TEXT_OPERATORS.includes(filter.op);
   const isMultiValueOperator = filter.op === 'in' || filter.op === 'not_in';
-
-  const hasValidTagAndValue = !!filter.tag?.trim() && !!filter.value?.[0]?.trim();
-
   const scopedFilters = useMemo(() => {
-    const prior = filters.slice(0, index);
-    const current = hasValidTagAndValue ? [filter] : [];
-    return [...prior, ...current];
-  }, [filters, filter, index, hasValidTagAndValue]);
+    const isValid = (f: Filter) => !!f.tag?.trim() && Array.isArray(f.value) && f.value.some((v) => !!v?.trim());
+    return filters.slice(0, index).filter(isValid);
+  }, [filters, index]);
 
   const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName);
 
@@ -209,7 +205,6 @@ export const FilterRow = ({
           )}
         </InlineField>
 
-        {/* Remove */}
         <InlineField>
           <IconButton
             name="trash-alt"
@@ -220,7 +215,6 @@ export const FilterRow = ({
           />
         </InlineField>
 
-        {/* Add */}
         {isLast && (
           <InlineField>
             <Button icon="plus" variant="secondary" onClick={addFilter} />
