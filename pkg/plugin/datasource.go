@@ -527,7 +527,7 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 	first := true
 	buf := make([]byte, 64*1024)
 
-	scaleUpWaiting := []byte(`{"type":"waiting_scale_up"}`)
+	scaleUpWaiting := []byte("data: {\"type\":\"waiting_scale_up\"}\n\n")
 
 	for {
 		n, rerr := resp.Body.Read(buf)
