@@ -46,7 +46,7 @@ export const FilterRow = ({
   updateAggregation,
   setIsWaiting,
 }: FilterRowProps) => {
-  const isMetricsMode = mode === 'metrics';
+  const isMetricsMode = mode === 'metrics' || mode === 'promQL';
   const isTracesMode = mode === 'traces';
 
   const isLast = index === filters.length - 1;

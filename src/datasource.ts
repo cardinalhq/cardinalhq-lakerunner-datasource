@@ -115,10 +115,12 @@ export class DataSource
   }
 
   getSupplementaryQuery(options: SupplementaryQueryOptions, query: MyQuery): MyQuery | undefined {
-    if (query.mode === 'metrics' && options.type === SupplementaryQueryType.LogsVolume) {
+    const isMetricsLike = query.mode === 'metrics' || query.mode === 'promQL';
+
+    if (isMetricsLike && options.type === SupplementaryQueryType.LogsVolume) {
       return undefined;
     }
-    if (query.mode === 'metrics' && options.type === SupplementaryQueryType.LogsSample) {
+    if (isMetricsLike && options.type === SupplementaryQueryType.LogsSample) {
       return undefined;
     }
 
@@ -339,7 +341,9 @@ export class DataSource
     this.resetLogBodyCache(target.refId);
 
     const isLogVolumeQuery = target.queryText === 'volume';
-    const isMetrics = target.mode === 'metrics';
+    const isPromql = target.mode === 'promQL';
+    const isMetrics = target.mode === 'metrics' || isPromql;
+
     const rawFilters: Filter[] = target.filters ?? [];
     const filters: Filter[] = rawFilters.filter((f) => {
       const isKeyValid = f.tag?.trim();
