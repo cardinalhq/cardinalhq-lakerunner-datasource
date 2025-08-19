@@ -62,13 +62,13 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
   const query = useMemo(() => (extractor ? { params: { stages: { extractor } } } : undefined), [extractor]);
 
   const selectedExtractions = useMemo(() => extractions.filter((e) => e.userSelected), [extractions]);
-
+  const [selectionFrameKey, setSelectionFrameKey] = useState(Date.now());
   const [selectionFrameQueryString, setSelectionFrameQueryString] = useState('');
   const [extractionFrameQueryString, setExtractionFrameQueryString] = useState('');
 
-  const updateSelectionFrameQueryString = (message: string, extList: LogLineExtractionMatch[]) => {
+  const updateSelectionFrameQueryString = (message: string, extractions: LogLineExtractionMatch[]) => {
     let queryString = `?sampleText=${encodeURIComponent(message)}`;
-    const selections = extList
+    const selections = extractions
       .filter((ext) => ext.userSelected === true)
       .map((ext) => `${ext.index}|${ext.recognizerName}`)
       .join(',');
@@ -76,11 +76,12 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
       queryString += `&selection=${encodeURIComponent(selections)}`;
     }
     setSelectionFrameQueryString(queryString);
+    setSelectionFrameKey(Date.now());
   };
 
-  const updateExtractionFrameQueryString = (message: string, extList: LogLineExtractionMatch[]) => {
+  const updateExtractionFrameQueryString = (message: string, extractions: LogLineExtractionMatch[]) => {
     let queryString = `?sampleText=${encodeURIComponent(message)}`;
-    const selections = extList.map((ext) => `${ext.index}|${ext.recognizerName}`).join(',');
+    const selections = extractions.map((ext) => `${ext.index}|${ext.recognizerName}`).join(',');
     if (!!selections) {
       queryString += `&selection=${encodeURIComponent(selections)}&extractPlaceholders=true`;
     }
@@ -120,7 +121,6 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
             line = line.substring(position + m.length);
             offset += position + m.length;
           });
-          setRegex(ex.regex || '');
           setExtractions(seeded);
         }
       } catch {}
@@ -136,18 +136,12 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
       const isExtractionFrame = extractionFrame.current?.contentWindow === event.source;
 
       if ((isSelectionFrame || isExtractionFrame) && !!event.data) {
-        let payload: any = event.data;
-        if (typeof payload === 'string') {
-          try {
-            payload = JSON.parse(payload);
-          } catch {
-            return;
-          }
-        }
-        const { regex: rx, selections }: { regex: string; selections: string } = payload;
-        setRegex(rx || '');
+        const payload = JSON.parse(event.data);
+        const { regex, selections }: { regex: string; selections: string } = payload;
 
-        if (rx) {
+        setRegex(regex || '');
+
+        if (regex) {
           setExtractions((prevExtractions) => {
             const newExtractions = (selections || '')
               .split(',')
@@ -163,7 +157,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
                     (ext) => ext.index === index && ext.recognizerName === recognizerName
                   );
                   const label = prevMatch?.label || '';
-                  const userSelected = prevMatch?.userSelected ?? isSelectionFrame;
+                  const userSelected = prevMatch?.userSelected || isSelectionFrame;
 
                   return {
                     index,
@@ -180,7 +174,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
               .sort((a, b) => a!.index - b!.index) as LogLineExtractionMatch[];
 
             try {
-              const re = new RegExp(rx, 'g');
+              const re = new RegExp(regex, 'g');
               const matches = Array.from(logMessage.matchAll(re));
               if (matches.length === 1 && matches[0].length > 1) {
                 const samples = matches[0].slice(1);
@@ -325,8 +319,16 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
           <div style={{ marginBottom: theme.spacing.sm }}>1. Select variable parts from the log message</div>
           <iframe
             ref={selectionFrame}
+            key={selectionFrameKey}
             src={`${regexGenRoot}/index.html${selectionFrameQueryString}`}
-            style={{ width: '100%', height: 165, border: 0 }}
+            width="100%"
+            style={{
+              borderWidth: 0,
+              width: '100%',
+              margin: 12,
+              marginBottom: 0,
+              height: 170,
+            }}
           />
         </div>
 
@@ -347,6 +349,22 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
                   <Input
                     value={ext.label.startsWith('var_') ? '' : ext.label}
                     placeholder="tag name"
+                    suffix={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        style={{ border: 'none', boxShadow: 'none' }}
+                        onClick={() => {
+                          const updated = extractions.filter(
+                            (x) => !(x.index === ext.index && x.recognizerName === ext.recognizerName)
+                          );
+                          setExtractions(updated);
+                          updateFrameQueryStrings(logMessage, updated);
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    }
                     onChange={(e) => {
                       const v = e.currentTarget.value;
                       setExtractions((prev) =>
@@ -362,20 +380,6 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
                       marginRight: theme.spacing.sm,
                     }}
                   />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      const updated = extractions.filter(
-                        (x) => !(x.index === ext.index && x.recognizerName === ext.recognizerName)
-                      );
-                      setExtractions(updated);
-                      updateFrameQueryStrings(logMessage, updated);
-                    }}
-                    style={{ borderWidth: 0 }}
-                  >
-                    Remove
-                  </Button>
                 </div>
               ))}
             </Stack>
