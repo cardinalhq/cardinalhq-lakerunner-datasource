@@ -73,8 +73,10 @@ export function useLabelValues({
         extract,
       }),
     enabled: shouldRun,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 50,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   return { data: labelValues, isLoading, error };

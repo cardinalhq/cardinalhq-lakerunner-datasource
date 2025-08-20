@@ -43,6 +43,14 @@ export function buildNestedFilter(filters: Filter[], extract?: ExtractSpec): any
         return 'not_regex';
       case 'has':
         return 'has';
+      case '>':
+        return 'gt';
+      case '<':
+        return 'lt';
+      case '>=':
+        return 'ge';
+      case '<=':
+        return 'le';
       default:
         return 'eq';
     }

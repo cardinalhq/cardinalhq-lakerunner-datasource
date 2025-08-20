@@ -13,6 +13,7 @@ import {
   ScopedVars,
   MetricFindValue,
   LegacyMetricFindQueryOptions as VariableQueryOptions,
+  CoreApp,
 } from '@grafana/data';
 import { getTemplateSrv } from '@grafana/runtime';
 import { Observable } from 'rxjs';
@@ -24,9 +25,47 @@ export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
   implements DataSourceWithSupplementaryQueriesSupport<MyQuery>
 {
-  private logBodyCache: Record<string, Set<string>> = {};
-  private cacheVersion: Record<string, number> = {};
+  getDefaultQuery(_: CoreApp): Partial<MyQuery> {
+    return {
+      refId: 'A',
+      mode: 'logs',
+      filters: [],
+      aggregation: 'sum',
+    };
+  }
+
   private previousFilters: Record<string, Filter[]> = {};
+  private fingerprintStore: Record<string, Map<string, string>> = {};
+  private prevTopFilter: Record<string, string | undefined> = {};
+  private clearLogs(refId: string) {
+    const key = this.normalizeRefId(refId);
+    this.fingerprintStore[key] = new Map();
+  }
+
+  private normalizeRefId(refId: string): string {
+    const key = refId.replace(/^(volume-|sample-)/, '');
+    return key;
+  }
+
+  public addLog(refId: string, fingerprint: string, body: string) {
+    const key = this.normalizeRefId(refId);
+    if (!this.fingerprintStore[key]) {
+      this.fingerprintStore[key] = new Map();
+    }
+    this.fingerprintStore[key].set(fingerprint, body);
+  }
+
+  public getFingerprints(refId: string): string[] {
+    const key = this.normalizeRefId(refId);
+    const fps = Array.from(this.fingerprintStore[key]?.keys() ?? []);
+    return fps;
+  }
+
+  public getBodies(refId: string): string[] {
+    const key = this.normalizeRefId(refId);
+    const bodies = Array.from(this.fingerprintStore[key]?.values() ?? []);
+    return bodies;
+  }
 
   private readonly instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>;
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
@@ -87,19 +126,6 @@ export class DataSource
       aggregation: q.aggregation,
       extractor: q.extractor,
     };
-  }
-
-  public getCachedLogBodies(refId: string): string[] {
-    const set = this.logBodyCache[refId] || new Set<string>();
-    return Array.from(set);
-  }
-
-  public getLogCacheVersion(refId: string): number {
-    return this.cacheVersion[refId] || 0;
-  }
-  public resetLogBodyCache(refId: string): void {
-    delete this.logBodyCache[refId];
-    delete this.cacheVersion[refId];
   }
   getSupportedSupplementaryQueryTypes(): SupplementaryQueryType[] {
     return [SupplementaryQueryType.LogsVolume, SupplementaryQueryType.LogsSample];
@@ -329,8 +355,17 @@ export class DataSource
     signal: AbortSignal,
     emit?: (frames: DataFrame[]) => void
   ): Promise<DataFrame[]> {
-    this.resetLogBodyCache(target.refId);
+    const key = this.normalizeRefId(target.refId);
 
+    const topFilter = target.filters?.[0]
+      ? `${target.filters[0].tag}:${target.filters[0].value?.join(',')}`
+      : undefined;
+
+    if (this.prevTopFilter[key] !== topFilter) {
+      console.log(`[runSingleQuery] top filter changed for ${key}, clearing logs`);
+      this.clearLogs(key);
+    }
+    this.prevTopFilter[key] = topFilter;
     const isLogVolumeQuery = target.queryText === 'volume';
     const isPromql = target.mode === 'promQL';
     const isMetrics = target.mode === 'metrics' || isPromql;
@@ -348,7 +383,11 @@ export class DataSource
     const hasFilters = filters.length > 0;
 
     if (!isMetrics && !hasFilters && !hasValidExtractor) {
-      return [];
+      filters.push({
+        tag: 'resource.service.name',
+        op: 'has',
+        value: [''],
+      });
     }
     if (isMetrics && !hasMetricName) {
       return [];
@@ -504,6 +543,7 @@ export class DataSource
     const severities: string[] = [];
     const ids: string[] = [];
     const labelsArr: any[] = [];
+    const fingerprints: string[] = [];
 
     let emitCount = 0;
     let totalLogs = 0;
@@ -669,8 +709,13 @@ export class DataSource
             const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
             const severity = msg.tags?.['_cardinalhq.level'] || '';
             const id = msg.tags?.['_cardinalhq.id'] || '';
+            const fingerprint = msg.tags?.['_cardinalhq.fingerprint'] || '';
             const rawTags = msg.tags || {};
             const labelTags: Record<string, any> = {};
+
+            if (fingerprint && body) {
+              this.addLog(target.refId, fingerprint, body);
+            }
 
             if (rawTags['_cardinalhq.message']) {
               labelTags['message'] = rawTags['_cardinalhq.message'];
@@ -684,13 +729,6 @@ export class DataSource
               }
             }
 
-            if (!this.logBodyCache[target.refId]) {
-              this.logBodyCache[target.refId] = new Set<string>();
-              this.cacheVersion[target.refId] = 0;
-            }
-            this.logBodyCache[target.refId].add(body);
-            this.cacheVersion[target.refId]++;
-
             totalLogs++;
 
             if (totalLogs <= MAX_INITIAL) {
@@ -699,6 +737,7 @@ export class DataSource
               severities.push(severity);
               ids.push(id);
               labelsArr.push(labelTags);
+              fingerprints.push(fingerprint);
             } else {
               const frame = toDataFrame({
                 refId: target.refId,
@@ -709,6 +748,7 @@ export class DataSource
                   { name: 'severity', type: FieldType.string, values: [severity] },
                   { name: 'id', type: FieldType.string, values: [id] },
                   { name: 'labels', type: FieldType.other, values: [labelTags] },
+                  { name: 'fingerprint', type: FieldType.string, values: fingerprints.slice() },
                 ],
               });
               frame.meta = {

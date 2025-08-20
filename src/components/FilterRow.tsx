@@ -3,7 +3,15 @@ import type { DataSource } from 'datasource';
 import React, { useMemo } from 'react';
 import { useLabels } from '../hooks/useLabels';
 import { useLabelValues } from '../hooks/useValues';
-import { AGGREGATE_OPTIONS, Aggregation, Filter, Operator, OPERATOR_OPTIONS, TEXT_OPERATORS } from '../types';
+import {
+  AGGREGATE_OPTIONS,
+  Aggregation,
+  Filter,
+  Operator,
+  OPERATOR_OPTIONS,
+  TEXT_OPERATORS,
+  NUMERIC_OPERATORS,
+} from '../types';
 
 interface FilterRowProps {
   datasource: DataSource;
@@ -59,16 +67,22 @@ export const FilterRow = ({
         })),
       }
     : undefined;
+  const isNumericExtractedTag =
+    !!filter.tag && !!normalizedExtract?.fields?.some((f) => f.name === filter.tag && f.type === 'number');
   const isMetricsMode = mode === 'metrics' || mode === 'promQL';
   const isTracesMode = mode === 'traces';
   const isLast = index === filters.length - 1;
-  const isTextOperator = TEXT_OPERATORS.includes(filter.op);
-  const isMultiValueOperator = filter.op === 'in' || filter.op === 'not_in';
+  const operatorOptions = isNumericExtractedTag
+    ? NUMERIC_OPERATORS.map((op) => ({ label: op, value: op as Operator }))
+    : OPERATOR_OPTIONS;
+
+  const isTextOperator = !isNumericExtractedTag && TEXT_OPERATORS.includes(filter.op);
+  const isMultiValueOperator = !isNumericExtractedTag && (filter.op === 'in' || filter.op === 'not_in');
   const scopedFilters = useMemo(() => {
     const isValid = (f: Filter) => !!f.tag?.trim() && Array.isArray(f.value) && f.value.some((v) => !!v?.trim());
     return filters.slice(0, index).filter(isValid);
   }, [filters, index]);
-  const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName);
+  const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName) && !isNumericExtractedTag;
 
   const { data: values = [], isLoading: loadingValues } = useLabelValues({
     datasource,
@@ -135,7 +149,6 @@ export const FilterRow = ({
   return (
     <>
       <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
-        {/* Tag */}
         <InlineField>
           <Select
             options={tagOptions}
@@ -147,9 +160,13 @@ export const FilterRow = ({
                 return;
               }
               const isMessage = selected === 'message';
+              const nextIsNumeric = !!normalizedExtract?.fields?.some(
+                (f) => f.name === selected && f.type === 'number'
+              );
+
               updateFilter(index, {
                 tag: selected,
-                op: isMessage ? 'contains' : '=',
+                op: nextIsNumeric ? '=' : isMessage ? 'contains' : '=',
                 value: [''],
               });
             }}
@@ -158,11 +175,10 @@ export const FilterRow = ({
           />
         </InlineField>
 
-        {/* Operator */}
         <InlineField>
           <Combobox
             width={10}
-            options={OPERATOR_OPTIONS}
+            options={operatorOptions}
             value={filter.op}
             onChange={(v) => {
               const selectedOp = v?.value as Operator;
@@ -172,9 +188,18 @@ export const FilterRow = ({
           />
         </InlineField>
 
-        {/* Value */}
         <InlineField>
-          {isTextOperator ? (
+          {isNumericExtractedTag ? (
+            <Input
+              type="number"
+              step="any"
+              value={filter.value?.[0] ?? ''}
+              onChange={(e) => updateFilter(index, { value: [e.currentTarget.value] })}
+              width={20}
+              placeholder="Enter number"
+              disabled={!filter.tag}
+            />
+          ) : isTextOperator ? (
             <Input
               value={filter.value?.[0] ?? ''}
               onChange={(e) => updateFilter(index, { value: [e.currentTarget.value] })}
@@ -235,7 +260,6 @@ export const FilterRow = ({
         )}
       </InlineFieldRow>
 
-      {/* Group By + Aggregation */}
       {isLast && !isTracesMode && (
         <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
           <InlineField label="Group by">

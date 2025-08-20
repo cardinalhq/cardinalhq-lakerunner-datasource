@@ -16,7 +16,7 @@ import { DataSource } from '../datasource';
 import { fetchMetricNames, toInternalLabel } from '../services/logs';
 import { AGGREGATE_OPTIONS, Aggregation, Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
 import { FilterRow } from './FilterRow';
-import { useLogBodies } from '../hooks/useLogBodies';
+import { useLogFingerprints } from '../hooks/useLogFingerprints';
 import { SelectedLogModal } from './SelectedLogModal';
 import { css } from '@emotion/css';
 import Promql from './PromQL';
@@ -46,9 +46,7 @@ export function QueryEditor({
   const [extractedNumericFields, setExtractedNumericFields] = useState<string[]>([]);
   const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: 'gauge' }>>([]);
   const hasLoadedMetrics = useRef(false);
-  const cacheVersion = datasource.getLogCacheVersion(query.refId);
-  const { bodies, isLoading: bodiesLoading } = useLogBodies(datasource, query.refId, cacheVersion);
-
+  const { bodies, isLoading: bodiesLoading } = useLogFingerprints(datasource, query.refId);
   const filters: Filter[] = useMemo(() => {
     const remaining = query.filters?.filter((f) => f.tag !== '_cardinalhq.name') ?? [];
     return remaining.length > 0 ? remaining : [{ tag: '', op: '=' as Operator, value: [''] }];
@@ -135,6 +133,26 @@ export function QueryEditor({
       onChange({ ...query, chartAggregation });
     }
   }, [chartAggregation, onChange, query]);
+
+  const hasExtraction =
+    !!query.extractor || !!query.chartField || !!selectedExemplar || extractedNumericFields.length > 0;
+
+  const resetExtraction = () => {
+    setExtractedNumericFields([]);
+    setChartField(null);
+    setChartAggregation('sum');
+    setSelectedExemplar(null);
+    setIsCollapseOpen(false);
+
+    onChange({
+      ...query,
+      extractor: undefined,
+      chartField: undefined,
+      chartAggregation: undefined,
+      selectedExemplar: undefined,
+    });
+    setLabelsRefreshKey((k) => k + 1);
+  };
 
   const promqlPreview = useMemo(() => {
     if (!(isPromqlMode && promqlSubTab === 'builder')) {
@@ -246,6 +264,8 @@ export function QueryEditor({
                   mode: targetMode,
                   filters: wantDefaultFilter ? [{ tag: '', op: '=' as Operator, value: [''] }] : [],
                   groupBy: [],
+                  chartField: undefined,
+                  extractor: undefined,
                   metricName: undefined,
                   metricType: undefined,
                 });
@@ -329,7 +349,7 @@ export function QueryEditor({
             <InlineField label="Select Message">
               <Combobox
                 loading={bodiesLoading}
-                options={bodies.map((b) => ({ label: b, value: b }))}
+                options={bodies.map((b, i) => ({ label: b, value: b }))}
                 value={selectedExemplar ?? ''}
                 onChange={(v) => {
                   setSelectedExemplar(v.value);
@@ -352,6 +372,16 @@ export function QueryEditor({
                 style={{ marginLeft: 8 }}
               >
                 Extract tags
+              </LinkButton>
+            </InlineField>
+            <InlineField>
+              <LinkButton
+                variant="secondary"
+                onClick={resetExtraction}
+                disabled={!hasExtraction}
+                style={{ marginLeft: 8 }}
+              >
+                Reset
               </LinkButton>
             </InlineField>
           </InlineFieldRow>

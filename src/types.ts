@@ -1,7 +1,20 @@
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData } from '@grafana/data';
 
-export type Operator = '=' | '!=' | 'in' | 'not_in' | 'contains' | 'not contains' | 'regex' | 'not regex' | 'has';
+export type Operator =
+  | '='
+  | '!='
+  | 'in'
+  | 'not_in'
+  | 'contains'
+  | 'not contains'
+  | 'regex'
+  | 'not regex'
+  | 'has'
+  | '>'
+  | '<'
+  | '>='
+  | '<=';
 
 export const OPERATOR_OPTIONS: Array<{ label: string; value: Operator }> = [
   { label: '=', value: '=' },
@@ -13,7 +26,6 @@ export const OPERATOR_OPTIONS: Array<{ label: string; value: Operator }> = [
   { label: 'regex', value: 'regex' },
   { label: 'not regex', value: 'not regex' },
 ];
-
 export const AGGREGATE_OPTIONS = [
   { label: 'Avg', value: 'avg' },
   { label: 'Sum', value: 'sum' },
@@ -24,6 +36,7 @@ export type Aggregation = 'avg' | 'sum' | 'min' | 'max';
 export type ChartAggregation = 'avg' | 'sum' | 'min' | 'max';
 export const TEXT_OPERATORS: Operator[] = ['contains', 'not contains', 'regex', 'not regex'];
 export const MULTIVALUE_OPERATORS: Operator[] = ['in', 'not_in'];
+export const NUMERIC_OPERATORS: Operator[] = ['=', '>', '<', '>=', '<='];
 
 export interface Filter {
   tag: string;
