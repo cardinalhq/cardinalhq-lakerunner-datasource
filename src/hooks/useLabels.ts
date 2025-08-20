@@ -57,8 +57,8 @@ export function useLabels({
 
   const { isLoading } = useQuery<string[], Error>({
     queryKey,
-    queryFn: ({ signal }) => {
-      return fetchTagKeys({
+    queryFn: ({ signal }) =>
+      fetchTagKeys({
         datasourceId: datasource.id,
         useRelativeTime: true,
         filters,
@@ -74,13 +74,13 @@ export function useLabels({
           setLabels(filtered);
         },
         extract,
-      });
-    },
+      }),
     enabled: shouldRun,
-    staleTime: 5 * 60 * 1000,
-    refetchOnMount: false,
+    staleTime: 50,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+    retry: 1,
   });
 
   return { data: labels, isLoading };
