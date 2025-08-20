@@ -456,17 +456,17 @@ export class DataSource
         groupBys: groupBy,
         type: 'count',
       };
-    } else if (hasNumericChartField) {
-      const selected = target.extractor!.selections.find(
-        (sel) => sel.label === chartField && sel.dataType === 'number'
-      );
+    } else if (hasNumericChartField || groupBy.length > 0) {
+      const selected = hasNumericChartField
+        ? target.extractor!.selections.find((sel) => sel.label === chartField && sel.dataType === 'number')
+        : undefined;
+
       expression.chart = {
-        aggregation: chartAggregation,
-        rollup: chartAggregation,
+        aggregation: hasNumericChartField ? chartAggregation : normalAggregation,
+        rollup: hasNumericChartField ? chartAggregation : normalAggregation,
         groupBys: groupBy,
         type: 'count',
-        fieldName: chartField,
-        fieldType: selected?.dataType ?? 'number',
+        ...(hasNumericChartField ? { fieldName: chartField, fieldType: selected?.dataType ?? 'number' } : {}),
       };
     }
 
@@ -612,9 +612,16 @@ export class DataSource
           }
           if (parsed.type === 'timeseries' && hasNumericChartField && !isMetrics && !isLogVolumeQuery) {
             const value = msg.value;
-            const label = `${chartField}=extracted`;
+            const tags = msg.tags || {};
 
             if (typeof value === 'number' && !isNaN(value)) {
+              const groupParts = groupBy.map((key) => {
+                const prettyKey = key.replace(/^_cardinalhq\./, '');
+                return `${prettyKey}=${tags[key] ?? 'unknown'}`;
+              });
+              const base = `${chartField}=extracted`;
+              const label = groupParts.length ? `${base}, ${groupParts.join(', ')}` : base;
+
               if (!frameData[label]) {
                 frameData[label] = { timestamps: [], values: [] };
               }
