@@ -24,17 +24,6 @@ import { promqlFromGraphPayload } from '../util/PromqlBuilder';
 import { buildNestedFilter } from '../util/buildNestedFilter';
 import { PrismPromQLEditor } from './PrismEditor';
 
-function areFiltersEqual(a: Filter[], b: Filter[]): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-  const normalize = (f: Filter) => `${f.tag}|${f.op}|${(f.value ?? []).join(',')}`;
-  return [...a]
-    .map(normalize)
-    .sort()
-    .every((v, i) => v === [...b].map(normalize).sort()[i]);
-}
-
 export function QueryEditor({
   query,
   onChange,
@@ -42,6 +31,7 @@ export function QueryEditor({
   datasource,
   range,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
+  const [labelsRefreshKey, setLabelsRefreshKey] = useState(0);
   const showPromql = datasource.isAdvancedEnabled();
   const showTraces = datasource.isTracesEnabled();
   const [isWaiting, setIsWaiting] = useState(false);
@@ -87,22 +77,6 @@ export function QueryEditor({
       previousFiltersRef.current = filters;
     }
   }, [filters]);
-
-  useEffect(() => {
-    const filtersChanged = !areFiltersEqual(previousFiltersRef.current, filters);
-    const exemplarStillPresent =
-      !!query.selectedExemplar && (bodies.includes(query.selectedExemplar) || bodies.length === 0);
-
-    if (filtersChanged) {
-      setSelectedExemplar(null);
-      setExtractedNumericFields([]);
-      setChartField(null);
-      onChange({ ...query, selectedExemplar: null, extractor: undefined, chartField: undefined });
-    } else if (query.selectedExemplar && exemplarStillPresent && selectedExemplar !== query.selectedExemplar) {
-      setSelectedExemplar(query.selectedExemplar);
-    }
-    previousFiltersRef.current = filters;
-  }, [filters, bodies, selectedExemplar, onChange, query]);
 
   useEffect(() => {
     if (!query.timeFrom && !query.timeTo && range?.from && range?.to) {
@@ -335,6 +309,8 @@ export function QueryEditor({
             aggregation={aggregation}
             updateAggregation={setAggregation}
             setIsWaiting={setIsWaiting}
+            extract={query.extractor}
+            labelsRefreshKey={labelsRefreshKey}
           />
         ))}
 
@@ -363,23 +339,21 @@ export function QueryEditor({
                 width={60}
               />
             </InlineField>
-            {selectedExemplar && bodies.includes(selectedExemplar) && (
-              <InlineField>
-                <LinkButton
-                  variant="secondary"
-                  onClick={() => {
-                    setModalTimeRange({
-                      startTime: timeRange.startTime ?? Date.now() - 5 * 60 * 1000,
-                      endTime: timeRange.endTime ?? Date.now(),
-                    });
-                    setIsModalOpen(true);
-                  }}
-                  style={{ marginLeft: 8 }}
-                >
-                  Extract tags
-                </LinkButton>
-              </InlineField>
-            )}
+            <InlineField>
+              <LinkButton
+                variant="secondary"
+                onClick={() => {
+                  setModalTimeRange({
+                    startTime: timeRange.startTime ?? Date.now() - 5 * 60 * 1000,
+                    endTime: timeRange.endTime ?? Date.now(),
+                  });
+                  setIsModalOpen(true);
+                }}
+                style={{ marginLeft: 8 }}
+              >
+                Extract tags
+              </LinkButton>
+            </InlineField>
           </InlineFieldRow>
           {extractedNumericFields.length > 0 && (
             <InlineFieldRow style={{ marginTop: 8 }}>
@@ -560,6 +534,7 @@ export function QueryEditor({
               selections: newExtractor.selections,
             },
           });
+          setLabelsRefreshKey((v) => v + 1);
           setIsCollapseOpen(true);
           onRunQuery();
         }}

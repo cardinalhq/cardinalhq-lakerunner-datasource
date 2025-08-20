@@ -254,6 +254,13 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
           ])
       ),
     };
+    const extract = {
+      regex: queryExtractorParams.regex,
+      fields: queryExtractorParams.fields.map((name, i) => ({
+        name,
+        type: queryExtractorParams.selections[i].dataType,
+      })),
+    };
 
     const payload = {
       baseExpressions: {
@@ -263,17 +270,10 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
           order: 'DESC',
           returnResults: true,
           filter: queryFilter,
-          extract: {
-            regex: queryExtractorParams.regex,
-            fields: queryExtractorParams.fields.map((name, i) => ({
-              name,
-              type: queryExtractorParams.selections[i].dataType,
-            })),
-          },
+          extract: extract,
         },
       },
     };
-
     const params = new URLSearchParams({
       s: `${timeRange.startTime}`,
       e: `${timeRange.endTime}`,
@@ -285,7 +285,6 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: `/api/v1/graph?${params.toString()}`, body: payload }),
       });
-
       const tagFilters = queryExtractorParams.selections
         .filter((s) => s.userSelected)
         .map(({ label, dataType }, i) => ({

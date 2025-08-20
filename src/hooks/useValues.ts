@@ -16,6 +16,10 @@ interface UseLabelValuesProps {
   startTime?: number;
   endTime?: number;
   setIsWaiting?: (v: boolean) => void;
+  extract?: {
+    regex: string;
+    fields: Array<{ name: string; type: 'string' | 'number' }>;
+  };
 }
 
 export function useLabelValues({
@@ -29,6 +33,7 @@ export function useLabelValues({
   startTime = Date.now() - 3600_000,
   endTime = Date.now(),
   setIsWaiting,
+  extract,
 }: UseLabelValuesProps) {
   const isInternalMetricLabel = mode === 'metrics' && labelName === '_cardinalhq.name';
   const shouldRun = enabled && !!labelName && !isInternalMetricLabel && (mode !== 'metrics' || !!metricName);
@@ -65,6 +70,7 @@ export function useLabelValues({
         endTime,
         setIsWaiting,
         onData: setLabelValues,
+        extract,
       }),
     enabled: shouldRun,
     staleTime: 5 * 60 * 1000,

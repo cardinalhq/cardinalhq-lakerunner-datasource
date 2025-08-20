@@ -28,15 +28,6 @@ export class DataSource
   private cacheVersion: Record<string, number> = {};
   private previousFilters: Record<string, Filter[]> = {};
 
-  private areFiltersEqual(a: Filter[], b: Filter[]): boolean {
-    if (a.length !== b.length) {
-      return false;
-    }
-    const normalize = (f: Filter) => `${f.tag}|${f.op}|${(f.value ?? []).join(',')}`;
-    const sortedA = [...a].map(normalize).sort();
-    const sortedB = [...b].map(normalize).sort();
-    return sortedA.every((v, i) => v === sortedB[i]);
-  }
   private readonly instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>;
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
     super(instanceSettings);
@@ -345,16 +336,13 @@ export class DataSource
     const isMetrics = target.mode === 'metrics' || isPromql;
 
     const rawFilters: Filter[] = target.filters ?? [];
+
     const filters: Filter[] = rawFilters.filter((f) => {
       const isKeyValid = f.tag?.trim();
       const isValueValid = Array.isArray(f.value) && f.value.some((v) => v?.trim?.());
       return isKeyValid && isValueValid;
     });
-    const prev = this.previousFilters[target.refId] ?? [];
-    const filtersChanged = !this.areFiltersEqual(prev, filters);
-    if (filtersChanged && !target.extractor?.selections?.length) {
-      target.extractor = undefined;
-    }
+
     const hasValidExtractor = !!target.extractor?.regex && Array.isArray(target.extractor?.fields);
     const hasMetricName = !!target.metricName;
     const hasFilters = filters.length > 0;
@@ -382,8 +370,18 @@ export class DataSource
     let allFilters = [...filters];
 
     if (target.extractor?.selections?.length) {
-      const extractedFilters: Filter[] = target.extractor.selections
-        .filter((sel) => sel.label && sel.userSelected)
+      const selected = target.extractor.selections.filter((sel) => sel.label && sel.userSelected);
+      const byInternal = new Map(selected.map((sel) => [toInternalLabel(sel.label), sel.dataType]));
+
+      const patchedFilters = filters.map((f) => {
+        const k = toInternalLabel(f.tag);
+        const t = byInternal.get(k);
+        return t ? { ...f, dataType: t, extracted: true } : f;
+      });
+
+      const present = new Set(patchedFilters.map((f) => toInternalLabel(f.tag)));
+      const additional: Filter[] = selected
+        .filter((sel) => !present.has(toInternalLabel(sel.label)))
         .map((sel) => ({
           tag: sel.label,
           op: 'has',
@@ -393,7 +391,7 @@ export class DataSource
           computed: false,
         }));
 
-      allFilters = [...allFilters, ...extractedFilters];
+      allFilters = [...patchedFilters, ...additional];
     }
 
     let nestedFilter = buildNestedFilter(allFilters);

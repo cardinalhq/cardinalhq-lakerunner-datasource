@@ -24,6 +24,8 @@ interface FilterRowProps {
   aggregation?: string;
   updateAggregation: (aggregation: Aggregation) => void;
   setIsWaiting?: (isWaiting: boolean) => void;
+  extract?: { regex: string; fields: string[]; selections?: Array<{ dataType: 'string' | 'number' }> };
+  labelsRefreshKey?: number;
 }
 
 export const FilterRow = ({
@@ -45,10 +47,20 @@ export const FilterRow = ({
   aggregation,
   updateAggregation,
   setIsWaiting,
+  extract,
+  labelsRefreshKey = 0,
 }: FilterRowProps) => {
+  const normalizedExtract = extract
+    ? {
+        regex: extract.regex,
+        fields: extract.fields.map((name, i) => ({
+          name,
+          type: extract.selections?.[i]?.dataType ?? 'string',
+        })),
+      }
+    : undefined;
   const isMetricsMode = mode === 'metrics' || mode === 'promQL';
   const isTracesMode = mode === 'traces';
-
   const isLast = index === filters.length - 1;
   const isTextOperator = TEXT_OPERATORS.includes(filter.op);
   const isMultiValueOperator = filter.op === 'in' || filter.op === 'not_in';
@@ -56,7 +68,6 @@ export const FilterRow = ({
     const isValid = (f: Filter) => !!f.tag?.trim() && Array.isArray(f.value) && f.value.some((v) => !!v?.trim());
     return filters.slice(0, index).filter(isValid);
   }, [filters, index]);
-
   const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName);
 
   const { data: values = [], isLoading: loadingValues } = useLabelValues({
@@ -70,8 +81,8 @@ export const FilterRow = ({
     startTime,
     endTime,
     setIsWaiting,
+    extract: normalizedExtract,
   });
-
   const { data: groupByLabels = [], isLoading: loadingGroupByLabels } = useLabels({
     datasource,
     filters: scopedFilters,
@@ -82,6 +93,8 @@ export const FilterRow = ({
     metricName,
     metricType,
     setIsWaiting,
+    extract: normalizedExtract,
+    refreshKey: labelsRefreshKey,
   });
 
   const tagOptionsBase =

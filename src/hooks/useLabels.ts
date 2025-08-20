@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { fetchTagKeys } from 'services/logs';
 import { truncateTo1Min } from 'util/QueryUtils';
 import type { DataSource } from '../datasource';
@@ -15,6 +15,11 @@ interface UseLabelsProps {
   startTime?: number;
   endTime?: number;
   setIsWaiting?: (v: boolean) => void;
+  extract?: {
+    regex: string;
+    fields: Array<{ name: string; type: 'string' | 'number' }>;
+  };
+  refreshKey?: number;
 }
 
 export function useLabels({
@@ -27,19 +32,28 @@ export function useLabels({
   startTime = Date.now() - 3600_000,
   endTime = Date.now(),
   setIsWaiting,
+  extract,
+  refreshKey = 0,
 }: UseLabelsProps) {
-  const queryKey = [
-    'labels',
-    mode,
-    truncateTo1Min(startTime),
-    truncateTo1Min(endTime),
-    JSON.stringify(filters),
-    metricName,
-    metricType,
-  ] as const;
-  const shouldRun = enabled && !!datasource?.id;
-
   const [labels, setLabels] = useState<string[]>([]);
+  const queryKey = useMemo(
+    () =>
+      [
+        'labels',
+        datasource?.id ?? 0,
+        mode,
+        truncateTo1Min(startTime),
+        truncateTo1Min(endTime),
+        JSON.stringify(filters ?? []),
+        metricName ?? '',
+        metricType ?? '',
+        extract ? JSON.stringify({ regex: extract.regex, fields: extract.fields }) : 'no-extractor',
+        refreshKey < 1,
+      ] as const,
+    [datasource?.id, mode, startTime, endTime, filters, metricName, metricType, extract, refreshKey]
+  );
+
+  const shouldRun = enabled && !!datasource?.id;
 
   const { isLoading } = useQuery<string[], Error>({
     queryKey,
@@ -55,7 +69,11 @@ export function useLabels({
         metricName,
         metricType,
         setIsWaiting,
-        onData: setLabels,
+        onData: (incoming) => {
+          const filtered = incoming.filter((label) => label !== 'nlp_struct');
+          setLabels(filtered);
+        },
+        extract,
       });
     },
     enabled: shouldRun,
