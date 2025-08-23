@@ -48,7 +48,7 @@ export function useLabels({
         metricName ?? '',
         metricType ?? '',
         extract ? JSON.stringify({ regex: extract.regex, fields: extract.fields }) : 'no-extractor',
-        refreshKey < 1,
+        refreshKey,
       ] as const,
     [datasource?.id, mode, startTime, endTime, filters, metricName, metricType, extract, refreshKey]
   );

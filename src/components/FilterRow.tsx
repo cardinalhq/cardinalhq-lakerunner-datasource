@@ -67,22 +67,26 @@ export const FilterRow = ({
         })),
       }
     : undefined;
-  const isNumericExtractedTag =
-    !!filter.tag && !!normalizedExtract?.fields?.some((f) => f.name === filter.tag && f.type === 'number');
+  const isDurationTag = !!filter.tag && filter.tag.toLowerCase().includes('duration');
+
+  const isNumericTag =
+    !!filter.tag &&
+    (normalizedExtract?.fields?.some((f) => f.name === filter.tag && f.type === 'number') || isDurationTag);
+
   const isMetricsMode = mode === 'metrics' || mode === 'promQL';
   const isTracesMode = mode === 'traces';
   const isLast = index === filters.length - 1;
-  const operatorOptions = isNumericExtractedTag
+  const operatorOptions = isNumericTag
     ? NUMERIC_OPERATORS.map((op) => ({ label: op, value: op as Operator }))
     : OPERATOR_OPTIONS;
 
-  const isTextOperator = !isNumericExtractedTag && TEXT_OPERATORS.includes(filter.op);
-  const isMultiValueOperator = !isNumericExtractedTag && (filter.op === 'in' || filter.op === 'not_in');
+  const isTextOperator = !isNumericTag && TEXT_OPERATORS.includes(filter.op);
+  const isMultiValueOperator = !isNumericTag && (filter.op === 'in' || filter.op === 'not_in');
   const scopedFilters = useMemo(() => {
     const isValid = (f: Filter) => !!f.tag?.trim() && Array.isArray(f.value) && f.value.some((v) => !!v?.trim());
     return filters.slice(0, index).filter(isValid);
   }, [filters, index]);
-  const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName) && !isNumericExtractedTag;
+  const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName) && !isNumericTag;
 
   const { data: values = [], isLoading: loadingValues } = useLabelValues({
     datasource,
@@ -159,15 +163,17 @@ export const FilterRow = ({
               if (selected === '__loading') {
                 return;
               }
+
               const isMessage = selected === 'message';
-              const nextIsNumeric = !!normalizedExtract?.fields?.some(
-                (f) => f.name === selected && f.type === 'number'
-              );
+              const nextIsDuration = selected.toLowerCase().includes('duration');
+              const nextIsNumeric =
+                nextIsDuration || !!normalizedExtract?.fields?.some((f) => f.name === selected && f.type === 'number');
 
               updateFilter(index, {
                 tag: selected,
                 op: nextIsNumeric ? '=' : isMessage ? 'contains' : '=',
                 value: [''],
+                dataType: nextIsNumeric ? 'number' : 'string',
               });
             }}
             placeholder="Select a tag"
@@ -189,7 +195,7 @@ export const FilterRow = ({
         </InlineField>
 
         <InlineField>
-          {isNumericExtractedTag ? (
+          {isNumericTag ? (
             <Input
               type="number"
               step="any"

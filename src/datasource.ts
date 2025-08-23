@@ -133,11 +133,11 @@ export class DataSource
 
   getSupplementaryQuery(options: SupplementaryQueryOptions, query: MyQuery): MyQuery | undefined {
     const isMetricsLike = query.mode === 'metrics' || query.mode === 'promQL';
-
+    const isTracesLike = query.mode === 'traces';
     if (isMetricsLike && options.type === SupplementaryQueryType.LogsVolume) {
       return undefined;
     }
-    if (isMetricsLike && options.type === SupplementaryQueryType.LogsSample) {
+    if ((isMetricsLike || isTracesLike) && options.type === SupplementaryQueryType.LogsSample) {
       return undefined;
     }
 
@@ -181,7 +181,7 @@ export class DataSource
 
   private parseVarQuery(raw: string): {
     kind: 'keys' | 'values';
-    dataset: 'logs' | 'metrics';
+    dataset: 'logs' | 'metrics' | 'traces';
     key?: string;
     metricName?: string;
     metricType?: string;
@@ -259,7 +259,7 @@ export class DataSource
     }
     const s = options?.range?.from?.valueOf?.() ?? this.getDefaultRange().s;
     const e = options?.range?.to?.valueOf?.() ?? this.getDefaultRange().e;
-    const dataset: 'logs' | 'metrics' = options?.dataset ?? 'logs';
+    const dataset: 'logs' | 'metrics' | 'traces' = options?.dataset ?? 'logs';
     const vals = await fetchTagValues({
       datasourceId: this.id,
       mode: dataset,
@@ -355,20 +355,20 @@ export class DataSource
     signal: AbortSignal,
     emit?: (frames: DataFrame[]) => void
   ): Promise<DataFrame[]> {
+    const ds = this.instanceSettings;
     const key = this.normalizeRefId(target.refId);
-
     const topFilter = target.filters?.[0]
       ? `${target.filters[0].tag}:${target.filters[0].value?.join(',')}`
       : undefined;
 
     if (this.prevTopFilter[key] !== topFilter) {
-      console.log(`[runSingleQuery] top filter changed for ${key}, clearing logs`);
       this.clearLogs(key);
     }
     this.prevTopFilter[key] = topFilter;
     const isLogVolumeQuery = target.queryText === 'volume';
     const isPromql = target.mode === 'promQL';
     const isMetrics = target.mode === 'metrics' || isPromql;
+    const isTrace = target.mode === 'traces';
 
     const rawFilters: Filter[] = target.filters ?? [];
 
@@ -382,7 +382,14 @@ export class DataSource
     const hasMetricName = !!target.metricName;
     const hasFilters = filters.length > 0;
 
-    if (!isMetrics && !hasFilters && !hasValidExtractor) {
+    if (!isMetrics && !hasFilters && !hasValidExtractor && !isTrace) {
+      filters.push({
+        tag: 'resource.service.name',
+        op: 'has',
+        value: [''],
+      });
+    }
+    if (isTrace) {
       filters.push({
         tag: 'resource.service.name',
         op: 'has',
@@ -449,7 +456,7 @@ export class DataSource
     const from = range?.from.valueOf();
     const to = range?.to.valueOf();
 
-    const dataset = isMetrics ? 'metrics' : 'logs';
+    const dataset = isMetrics ? 'metrics' : isTrace ? 'traces' : 'logs';
     const expression: any = {
       dataset,
       returnResults: true,
@@ -480,6 +487,13 @@ export class DataSource
       target.extractor?.selections?.some((sel) => sel.label === chartField && sel.dataType === 'number');
 
     if (isMetrics) {
+      expression.chart = {
+        aggregation: normalAggregation,
+        rollup: normalAggregation,
+        groupBys: groupBy,
+        type: 'count',
+      };
+    } else if (isTrace) {
       expression.chart = {
         aggregation: normalAggregation,
         rollup: normalAggregation,
@@ -617,12 +631,225 @@ export class DataSource
       return frame;
     };
 
+    const getTraceId = (tags: Record<string, any>): string => String(tags['_cardinalhq.span_trace_id'] ?? '');
+
+    const getSpanId = (tags: Record<string, any>, i: number): string => String(tags['_cardinalhq.span_span_id'] ?? '');
+
+    const getParentSpanId = (tags: Record<string, any>): string => String(tags['span.parent_span_id'] ?? '');
+
+    const getStartTs = (tags: Record<string, any>, fallbackTs: number): number =>
+      Number(tags['span.start_timestamp'] ?? '');
+
+    const getDurationMs = (tags: Record<string, any>): number => {
+      const ms = tags['span.duration_ms'] ?? '';
+      if (ms != null && !Number.isNaN(Number(ms))) {
+        return Number(ms);
+      }
+      const sec = tags['_cardinalhq.span_duration'];
+      if (sec != null && !Number.isNaN(Number(sec))) {
+        return Math.max(1, Math.round(Number(sec) * 1000));
+      }
+      return 1;
+    };
+
+    const getServiceName = (tags: Record<string, any>): string => String(tags['resource.service.name'] ?? '');
+
+    const getOperationName = (tags: Record<string, any>, body?: string): string => String(tags['span.name'] ?? '');
+
+    const selectedTraceId = filters.find(
+      (f) =>
+        toInternalLabel(f.tag) === '_cardinalhq.span_trace_id' &&
+        f.op === '=' &&
+        Array.isArray(f.value) &&
+        f.value.length === 1 &&
+        String(f.value[0]).trim() !== ''
+    )?.value?.[0];
+
+    const buildTraceTable = (): DataFrame => {
+      const traceID: string[] = [];
+      const spanID: string[] = [];
+      const parentSpanID: string[] = [];
+      const service: string[] = [];
+      const timestamp: number[] = [];
+      const duration: number[] = [];
+      const name: string[] = [];
+
+      for (let i = 0; i < timestamps.length; i++) {
+        const tags = labelsArr[i] ?? {};
+        const tid = getTraceId(tags);
+        if (!tid) {
+          continue;
+        }
+
+        traceID.push(tid);
+        spanID.push(getSpanId(tags, i));
+        parentSpanID.push(getParentSpanId(tags));
+        service.push(getServiceName(tags));
+        timestamp.push(getStartTs(tags, Number(timestamps[i])));
+        duration.push(getDurationMs(tags));
+        name.push(getOperationName(tags));
+      }
+
+      const frame = toDataFrame({
+        refId: target.refId,
+        name: 'Traces',
+        fields: [
+          {
+            name: 'spanID',
+            type: FieldType.string,
+            values: spanID,
+            config: {
+              displayName: 'Span ID',
+              links: [
+                {
+                  title: 'View trace for span ${__value.raw}',
+                  url: '',
+                  internal: {
+                    datasourceUid: ds.uid,
+                    datasourceName: ds.name,
+                    query: {
+                      refId: 'A',
+                      mode: 'traces',
+                      queryType: 'traceql',
+                      filters: [{ tag: '_cardinalhq.span_trace_id', op: '=', value: ['${__data.fields.traceID}'] }],
+                      groupBy: [],
+                    },
+                    panelsState: {
+                      trace: { spanId: '${__value.raw}' },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          {
+            name: 'traceID',
+            type: FieldType.string,
+            values: traceID,
+            config: {
+              displayName: 'Trace ID',
+              links: [
+                {
+                  title: 'View trace ${__value.raw}',
+                  url: '',
+                  internal: {
+                    datasourceUid: ds.uid,
+                    datasourceName: ds.name,
+                    query: {
+                      refId: 'A',
+                      mode: 'traces',
+                      queryType: 'traceql',
+                      filters: [{ tag: '_cardinalhq.span_trace_id', op: '=', value: ['${__value.raw}'] }],
+                      groupBy: [],
+                    },
+                  },
+                },
+              ],
+            },
+          },
+          { name: 'timestamp', type: FieldType.time, values: timestamp, config: { displayName: 'Start Time' } },
+          { name: 'service', type: FieldType.string, values: service, config: { displayName: 'service.name' } },
+          { name: 'name', type: FieldType.string, values: name, config: { displayName: 'Name' } },
+          { name: 'durationMs', type: FieldType.number, values: duration, config: { displayName: 'Duration' } },
+        ],
+      });
+
+      frame.meta = { preferredVisualisationType: 'table' };
+      return frame;
+    };
+    const isInternal = (k: string) => k.startsWith('_cardinalhq');
+    const isResource = (k: string) => k.startsWith('resource.');
+
+    const toKVs = (obj: Record<string, any>) => Object.entries(obj ?? {}).map(([key, value]) => ({ key, value }));
+
+    const splitTags = (all: Record<string, any>) => {
+      const kvs = toKVs(all).filter(({ key }) => !isInternal(key));
+      const resourceTags = kvs.filter(({ key }) => isResource(key));
+      const spanTags = kvs.filter(({ key }) => !isResource(key));
+      return { spanTags, resourceTags };
+    };
+
+    const buildTraceWaterfall = (): DataFrame => {
+      const traceID: string[] = [];
+      const spanID: string[] = [];
+      const parentSpanID: string[] = [];
+      const serviceName: string[] = [];
+      const operationName: string[] = [];
+      const startTime: number[] = [];
+      const duration: number[] = [];
+
+      const tagsCol: Array<Array<{ key: string; value: any }>> = [];
+      const serviceTagsCol: Array<Array<{ key: string; value: any }>> = [];
+      const logsCol: Array<Array<{ timestamp: number; name?: string; fields: Array<{ key: string; value: any }> }>> =
+        [];
+      const refsCol: Array<Array<{ traceID: string; spanID: string; tags?: Array<{ key: string; value: any }> }>> = [];
+
+      for (let i = 0; i < timestamps.length; i++) {
+        const tags = labelsArr[i] ?? {};
+        const tid = getTraceId(tags);
+        if (selectedTraceId && tid !== selectedTraceId) {
+          continue;
+        }
+
+        const ts = getStartTs(tags, Number(timestamps[i]));
+        const sId = getSpanId(tags, i);
+        const pId = getParentSpanId(tags);
+        const svc = getServiceName(tags);
+        const op = getOperationName(tags, bodies[i]);
+        const durMs = getDurationMs(tags);
+
+        const { spanTags, resourceTags } = splitTags(tags);
+
+        traceID.push(tid);
+        spanID.push(sId);
+        parentSpanID.push(pId);
+        serviceName.push(svc);
+        operationName.push(op);
+        startTime.push(ts);
+        duration.push(durMs);
+
+        tagsCol.push(spanTags);
+        serviceTagsCol.push(resourceTags);
+        logsCol.push(op ? [{ timestamp: ts, name: 'log', fields: [{ key: 'message', value: op }] }] : []);
+        refsCol.push([]);
+      }
+
+      const fields: any[] = [
+        { name: 'traceID', type: FieldType.string, values: traceID },
+        { name: 'spanID', type: FieldType.string, values: spanID },
+        { name: 'parentSpanID', type: FieldType.string, values: parentSpanID },
+        { name: 'serviceName', type: FieldType.string, values: serviceName },
+        { name: 'operationName', type: FieldType.string, values: operationName },
+        { name: 'startTime', type: FieldType.number, values: startTime },
+        { name: 'duration', type: FieldType.number, values: duration },
+        { name: 'tags', type: FieldType.other, values: tagsCol },
+        { name: 'serviceTags', type: FieldType.other, values: serviceTagsCol },
+        // { name: 'logs', type: FieldType.other, values: logsCol },
+        { name: 'references', type: FieldType.other, values: refsCol },
+      ];
+
+      const frame = toDataFrame({ refId: target.refId, name: 'Traces', fields });
+      frame.meta = { preferredVisualisationType: 'trace', custom: { traceFormat: 'otlp' } } as any;
+      return frame;
+    };
+
+    const isTraceDetail =
+      isTrace &&
+      filters.some(
+        (f) =>
+          toInternalLabel(f.tag) === '_cardinalhq.span_trace_id' &&
+          f.op === '=' &&
+          Array.isArray(f.value) &&
+          f.value.length === 1 &&
+          String(f.value[0]).trim() !== ''
+      );
+
     const flushMetricFrames = () => {
       flushMetricFramesInto(frames);
     };
 
     const flushLogFrame = () => {
-      const frame = buildLogsSnapshot();
+      const frame = isTraceDetail ? buildTraceWaterfall() : isTrace ? buildTraceTable() : buildLogsSnapshot();
       frames.push(frame);
     };
 
@@ -641,14 +868,13 @@ export class DataSource
         if (!line.startsWith('data:')) {
           continue;
         }
-
         try {
           const parsed = JSON.parse(line.slice(5).trim());
           const msg = parsed.message;
           if (!msg) {
             continue;
           }
-          if (parsed.type === 'timeseries' && hasNumericChartField && !isMetrics && !isLogVolumeQuery) {
+          if (parsed.type === 'timeseries' && hasNumericChartField && !isMetrics && !isLogVolumeQuery && !isTrace) {
             const value = msg.value;
             const tags = msg.tags || {};
 
@@ -687,7 +913,7 @@ export class DataSource
             frameData[label].values.push(val);
 
             emitCount++;
-          } else if (parsed.type === 'timeseries' && msg.tags?.name === 'log.events') {
+          } else if (parsed.type === 'timeseries' && msg.tags?.name === 'log.events' && !isTrace) {
             const ts = msg.timestamp;
             const val = msg.value ?? 0;
             const tags = msg.tags || {};
@@ -704,7 +930,28 @@ export class DataSource
             frameData[label].timestamps.push(ts);
             frameData[label].values.push(val);
             emitCount++;
-          } else if (parsed.type === 'event') {
+          } else if (parsed.type === 'event' && isTrace) {
+            const ts = msg.timestamp;
+            const fingerprint = msg.tags?.['_cardinalhq.fingerprint'] || '';
+            const level = msg.tags?.['_cardinalhq.level'] || '';
+            const message = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
+
+            totalLogs++;
+
+            if (totalLogs <= MAX_INITIAL) {
+              timestamps.push(ts);
+              fingerprints.push(fingerprint);
+              severities.push(level);
+              bodies.push(message);
+              labelsArr.push(msg.tags || {});
+            } else {
+              const frame = isTraceDetail ? buildTraceWaterfall() : buildTraceTable();
+              frames.push(frame);
+              if (emit) {
+                emit([frame]);
+              }
+            }
+          } else if (parsed.type === 'event' && !isTrace) {
             const ts = msg.timestamp;
             const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
             const severity = msg.tags?.['_cardinalhq.level'] || '';
@@ -767,7 +1014,7 @@ export class DataSource
             const batch: DataFrame[] = [];
             flushMetricFramesInto(batch);
             if (!isMetrics && totalLogs > 0 && totalLogs <= MAX_INITIAL) {
-              batch.push(buildLogsSnapshot());
+              batch.push(isTraceDetail ? buildTraceWaterfall() : isTrace ? buildTraceTable() : buildLogsSnapshot());
             }
             if (batch.length) {
               emit!(batch);
