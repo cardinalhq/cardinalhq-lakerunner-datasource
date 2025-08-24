@@ -14,6 +14,7 @@ import {
   MetricFindValue,
   LegacyMetricFindQueryOptions as VariableQueryOptions,
   CoreApp,
+  QueryFixAction,
 } from '@grafana/data';
 import { getTemplateSrv } from '@grafana/runtime';
 import { Observable } from 'rxjs';
@@ -33,7 +34,68 @@ export class DataSource
       aggregation: 'sum',
     };
   }
+  modifyQuery(query: MyQuery, action: QueryFixAction): MyQuery {
+    const key = action.options?.key;
+    const rawVal = action.options?.value;
 
+    if (!key || rawVal == null) {
+      return query;
+    }
+    const val = String(rawVal);
+    const next = { ...query, filters: [...(query.filters ?? [])] };
+    const findFilter = (ops: string[]) => next.filters.find((f) => f.tag === key && ops.includes(String(f.op)));
+
+    const pushUnique = (arr: string[], v: string) => {
+      if (!arr.includes(v)) {
+        arr.push(v);
+      }
+    };
+
+    switch (action.type) {
+      case 'ADD_FILTER': {
+        let f = findFilter(['in', '=']);
+        if (!f) {
+          f = { tag: key, op: '=', value: [val] };
+          next.filters.push(f);
+        } else {
+          if (f.op === '=') {
+            if (!f.value?.includes(val)) {
+              f.op = 'in';
+              f.value = [f.value?.[0] as string, val].filter(Boolean);
+            }
+          } else {
+            f.value = Array.isArray(f.value) ? [...f.value] : [];
+            pushUnique(f.value, val);
+          }
+        }
+        break;
+      }
+
+      case 'ADD_FILTER_OUT': {
+        let f = findFilter(['not_in', '!=']);
+        if (!f) {
+          f = { tag: key, op: 'not_in', value: [val] };
+          next.filters.push(f);
+        } else {
+          if (f.op === '!=') {
+            if (!f.value?.includes(val)) {
+              f.op = 'not_in';
+              f.value = [f.value?.[0] as string, val].filter(Boolean);
+            }
+          } else {
+            f.value = Array.isArray(f.value) ? [...f.value] : [];
+            pushUnique(f.value, val);
+          }
+        }
+        break;
+      }
+
+      default:
+        return query;
+    }
+
+    return next;
+  }
   private previousFilters: Record<string, Filter[]> = {};
   private fingerprintStore: Record<string, Map<string, string>> = {};
   private prevTopFilter: Record<string, string | undefined> = {};
@@ -381,6 +443,37 @@ export class DataSource
     const hasValidExtractor = !!target.extractor?.regex && Array.isArray(target.extractor?.fields);
     const hasMetricName = !!target.metricName;
     const hasFilters = filters.length > 0;
+    const HIGHLIGHT_OPS = new Set<string>(['contains', ...TEXT_OPERATORS]);
+
+    const MESSAGE_KEYS = new Set<string>(['_cardinalhq.message', 'log.message', 'message']);
+
+    function expandWordVariants(word: string): string[] {
+      if (!word) {
+        return [];
+      }
+      return [word, word.toLowerCase(), word.toUpperCase(), word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()];
+    }
+
+    const searchWords: string[] = Array.from(
+      new Set(
+        (target.filters ?? []).flatMap((f) => {
+          const tag = toInternalLabel(f.tag || '');
+          if (!MESSAGE_KEYS.has(tag)) {
+            return [];
+          }
+          if (!HIGHLIGHT_OPS.has(String(f.op))) {
+            return [];
+          }
+          if (!Array.isArray(f.value)) {
+            return [];
+          }
+          return f.value
+            .map((v) => v?.trim?.())
+            .filter(Boolean)
+            .flatMap((v) => expandWordVariants(v as string));
+        })
+      )
+    ).slice(0, 20);
 
     if (!isMetrics && !hasFilters && !hasValidExtractor && !isTrace) {
       filters.push({
@@ -626,7 +719,10 @@ export class DataSource
       frame.meta = {
         type: DataFrameType.LogLines,
         preferredVisualisationType: 'logs',
-        custom: { limit: 1000 },
+        custom: {
+          limit: 1000,
+          ...(searchWords.length ? { searchWords } : {}),
+        },
       };
       return frame;
     };
@@ -1031,7 +1127,6 @@ export class DataSource
             }
 
             totalLogs++;
-
             if (totalLogs <= MAX_INITIAL) {
               timestamps.push(ts);
               bodies.push(body);
@@ -1055,7 +1150,10 @@ export class DataSource
               frame.meta = {
                 type: DataFrameType.LogLines,
                 preferredVisualisationType: 'logs',
-                custom: { limit: 1000 },
+                custom: {
+                  limit: 1000,
+                  ...(searchWords.length ? { searchWords } : {}),
+                },
               };
 
               frames.push(frame);

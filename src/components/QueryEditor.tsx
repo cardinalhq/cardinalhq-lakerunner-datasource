@@ -1,16 +1,5 @@
 import { QueryEditorProps } from '@grafana/data';
-import {
-  Collapse,
-  Combobox,
-  Icon,
-  InlineField,
-  InlineFieldRow,
-  LinkButton,
-  Select,
-  Spinner,
-  Tab,
-  TabsBar,
-} from '@grafana/ui';
+import { Collapse, Combobox, Icon, InlineField, InlineFieldRow, LinkButton, Spinner, Tab, TabsBar } from '@grafana/ui';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DataSource } from '../datasource';
 import { fetchMetricNames, toInternalLabel } from '../services/logs';
@@ -294,11 +283,11 @@ export function QueryEditor({
       {isMetricsMode && !isPromqlMode && (
         <InlineFieldRow>
           <InlineField label="Metric Name">
-            <Select
+            <Combobox
               placeholder="Select a metric"
               options={metricOptions.map((m) => ({ label: m.metricName, value: m.metricName }))}
               value={query.metricName ? { label: query.metricName, value: query.metricName } : null}
-              allowCustomValue
+              createCustomValue
               onChange={(opt) => {
                 const val = opt?.value ?? '';
                 const found = metricOptions.find((m) => m.metricName === val);
@@ -452,11 +441,15 @@ export function QueryEditor({
             <>
               <InlineFieldRow>
                 <InlineField label="Metric Name">
-                  <Select
+                  <Combobox
                     placeholder="Select a metric"
                     options={metricOptions.map((m) => ({ label: m.metricName, value: m.metricName }))}
                     value={query.metricName ? { label: query.metricName, value: query.metricName } : null}
-                    allowCustomValue
+                    createCustomValue
+                    isClearable
+                    width="auto"
+                    minWidth={20}
+                    maxWidth={40}
                     onChange={(opt) => {
                       const val = opt?.value ?? '';
                       const found = metricOptions.find((m) => m.metricName === val);
@@ -466,7 +459,6 @@ export function QueryEditor({
                         onChange({ ...query, metricName: val, metricType: undefined });
                       }
                     }}
-                    width={40}
                   />
                 </InlineField>
               </InlineFieldRow>

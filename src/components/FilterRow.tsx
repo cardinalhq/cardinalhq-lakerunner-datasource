@@ -159,10 +159,10 @@ export const FilterRow = ({
     <>
       <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
         <InlineField>
-          <Select
+          <Combobox
             options={tagOptions}
             value={filter.tag ? { label: filter.tag, value: filter.tag } : null}
-            allowCustomValue
+            createCustomValue
             onChange={(v) => {
               const selected = v?.value ?? '';
               if (selected === '__loading') {
@@ -182,7 +182,7 @@ export const FilterRow = ({
               });
             }}
             placeholder="Select a tag"
-            isLoading={loadingGroupByLabels}
+            loading={loadingGroupByLabels}
           />
         </InlineField>
 
@@ -237,10 +237,10 @@ export const FilterRow = ({
             </div>
           ) : (
             <div style={!filter.tag ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
-              <Select
+              <Combobox
                 options={valueOptions}
                 value={filter.value?.[0] ? { label: filter.value[0], value: filter.value[0] } : null}
-                allowCustomValue
+                createCustomValue
                 onChange={(v) => {
                   const val = v?.value ?? '';
                   if (val !== '__loading' && val !== '__none') {
@@ -248,7 +248,7 @@ export const FilterRow = ({
                   }
                 }}
                 placeholder="Value"
-                isLoading={loadingValues}
+                loading={loadingValues}
               />
             </div>
           )}
