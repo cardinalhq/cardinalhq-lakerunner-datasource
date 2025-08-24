@@ -723,34 +723,38 @@ export class DataSource
             },
           },
           {
+            name: 'service',
+            type: FieldType.string,
+            values: service,
+            config: {
+              displayName: 'Service Name',
+              align: 'center',
+              minWidth: 140,
+            },
+          },
+          { name: 'name', type: FieldType.string, values: name, config: { displayName: 'Span Name' } },
+          { name: 'timestamp', type: FieldType.time, values: timestamp, config: { displayName: 'Start Time' } },
+          {
+            name: 'durationMs',
+            type: FieldType.number,
+            values: duration,
+            config: {
+              displayName: 'Duration',
+              unit: 'ms',
+              decimals: 0,
+              custom: {
+                align: 'right',
+              },
+            },
+          },
+          {
             name: 'traceID',
             type: FieldType.string,
             values: traceID,
             config: {
               displayName: 'Trace ID',
-              links: [
-                {
-                  title: 'View trace ${__value.raw}',
-                  url: '',
-                  internal: {
-                    datasourceUid: ds.uid,
-                    datasourceName: ds.name,
-                    query: {
-                      refId: 'A',
-                      mode: 'traces',
-                      queryType: 'traceql',
-                      filters: [{ tag: '_cardinalhq.span_trace_id', op: '=', value: ['${__value.raw}'] }],
-                      groupBy: [],
-                    },
-                  },
-                },
-              ],
             },
           },
-          { name: 'timestamp', type: FieldType.time, values: timestamp, config: { displayName: 'Start Time' } },
-          { name: 'service', type: FieldType.string, values: service, config: { displayName: 'service.name' } },
-          { name: 'name', type: FieldType.string, values: name, config: { displayName: 'Name' } },
-          { name: 'durationMs', type: FieldType.number, values: duration, config: { displayName: 'Duration' } },
         ],
       });
 
@@ -767,6 +771,56 @@ export class DataSource
       const resourceTags = kvs.filter(({ key }) => isResource(key));
       const spanTags = kvs.filter(({ key }) => !isResource(key));
       return { spanTags, resourceTags };
+    };
+    type SpanEvent = {
+      timestamp: number;
+      name: string;
+      fields: Array<{ key: string; value: any }>;
+    };
+
+    const getSpanEvents = (tags: Record<string, any>): SpanEvent[] => {
+      const raw = tags['_cardinalhq.span_events'];
+      let events: any[] = [];
+      if (raw) {
+        try {
+          events = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : [];
+        } catch {
+          events = [];
+        }
+      }
+      return events
+        .map((e) => {
+          const tsRaw = e?.timestamp;
+          const ts = Number(tsRaw);
+          const attrs = e?.attributes ?? {};
+
+          const hasAny =
+            attrs['exception.type'] != null ||
+            attrs['exception.message'] != null ||
+            attrs['exception.stacktrace'] != null;
+
+          if (!hasAny || !Number.isFinite(ts)) {
+            return null;
+          }
+
+          const fields: Array<{ key: string; value: any }> = [];
+          if (attrs['exception.type'] != null) {
+            fields.push({ key: 'exception.type', value: attrs['exception.type'] });
+          }
+          if (attrs['exception.message'] != null) {
+            fields.push({ key: 'exception.message', value: attrs['exception.message'] });
+          }
+          if (attrs['exception.stacktrace'] != null) {
+            fields.push({ key: 'exception.stacktrace', value: attrs['exception.stacktrace'] });
+          }
+
+          return {
+            timestamp: ts,
+            name: e?.name ?? 'exception',
+            fields,
+          } as SpanEvent;
+        })
+        .filter((ev): ev is SpanEvent => !!ev);
     };
 
     const buildTraceWaterfall = (): DataFrame => {
@@ -810,7 +864,7 @@ export class DataSource
 
         tagsCol.push(spanTags);
         serviceTagsCol.push(resourceTags);
-        logsCol.push(op ? [{ timestamp: ts, name: 'log', fields: [{ key: 'message', value: op }] }] : []);
+        logsCol.push(getSpanEvents(tags));
         refsCol.push([]);
       }
 
@@ -824,7 +878,8 @@ export class DataSource
         { name: 'duration', type: FieldType.number, values: duration },
         { name: 'tags', type: FieldType.other, values: tagsCol },
         { name: 'serviceTags', type: FieldType.other, values: serviceTagsCol },
-        // { name: 'logs', type: FieldType.other, values: logsCol },
+        { name: 'events', type: FieldType.other, values: logsCol },
+        { name: 'logs', type: FieldType.other, values: logsCol },
         { name: 'references', type: FieldType.other, values: refsCol },
       ];
 
@@ -832,7 +887,6 @@ export class DataSource
       frame.meta = { preferredVisualisationType: 'trace', custom: { traceFormat: 'otlp' } } as any;
       return frame;
     };
-
     const isTraceDetail =
       isTrace &&
       filters.some(
