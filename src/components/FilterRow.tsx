@@ -12,6 +12,7 @@ import {
   TEXT_OPERATORS,
   NUMERIC_OPERATORS,
 } from '../types';
+import { toInternalLabel } from 'services/logs';
 
 interface FilterRowProps {
   datasource: DataSource;
@@ -84,8 +85,12 @@ export const FilterRow = ({
   const isMultiValueOperator = !isNumericTag && (filter.op === 'in' || filter.op === 'not_in');
   const scopedFilters = useMemo(() => {
     const isValid = (f: Filter) => !!f.tag?.trim() && Array.isArray(f.value) && f.value.some((v) => !!v?.trim());
-    return filters.slice(0, index).filter(isValid);
-  }, [filters, index]);
+    const currentInternal = toInternalLabel(filter.tag || '');
+    return (filters ?? [])
+      .filter((_, i) => i !== index)
+      .filter(isValid)
+      .filter((f) => toInternalLabel(f.tag || '') !== currentInternal);
+  }, [filters, index, filter.tag]);
   const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName) && !isNumericTag;
 
   const { data: values = [], isLoading: loadingValues } = useLabelValues({

@@ -138,17 +138,33 @@ export function QueryEditor({
     !!query.extractor || !!query.chartField || !!selectedExemplar || extractedNumericFields.length > 0;
 
   const resetExtraction = () => {
+    const prevExtractedNames =
+      (query.extractor?.fields ?? [])
+        .map((f) => f)
+        .map((f: any) => (typeof f === 'string' ? f : f.name))
+        .filter((n: string) => n && !/^var_/.test(n)) || [];
+
+    const prevExtractedInternal = new Set(prevExtractedNames.map((n) => toInternalLabel(n)));
+    const scrubFilterTag = (tag?: string) => !prevExtractedInternal.has(toInternalLabel(tag || ''));
+
+    const scrubbedFilters = (query.filters ?? []).filter((f) => scrubFilterTag(f.tag));
+
+    const scrubbedGroupBy = (query.groupBy ?? []).filter((g) => scrubFilterTag(g));
+
+    const nextChartField = chartField && !prevExtractedInternal.has(toInternalLabel(chartField)) ? chartField : null;
+
     setExtractedNumericFields([]);
-    setChartField(null);
+    setChartField(nextChartField);
     setChartAggregation('sum');
     setSelectedExemplar(null);
     setIsCollapseOpen(false);
-
     onChange({
       ...query,
       extractor: undefined,
-      chartField: undefined,
-      chartAggregation: undefined,
+      filters: scrubbedFilters.length ? scrubbedFilters : [{ tag: '', op: '=' as Operator, value: [''] }],
+      groupBy: scrubbedGroupBy,
+      chartField: nextChartField ?? undefined,
+      chartAggregation: nextChartField ? query.chartAggregation ?? 'sum' : undefined,
       selectedExemplar: undefined,
     });
     setLabelsRefreshKey((k) => k + 1);
