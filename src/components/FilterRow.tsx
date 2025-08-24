@@ -187,7 +187,7 @@ export const FilterRow = ({
     <>
       <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
         <InlineField>
-          <Combobox
+          <Select
             options={tagOptions}
             value={filter.tag ? { label: filter.tag, value: filter.tag } : null}
             createCustomValue
@@ -265,7 +265,7 @@ export const FilterRow = ({
             </div>
           ) : (
             <div style={!filter.tag ? { pointerEvents: 'none', opacity: 0.5 } : {}}>
-              <Combobox
+              <Select
                 options={valueOptions}
                 value={filter.value?.[0] ? { label: filter.value[0], value: filter.value[0] } : null}
                 createCustomValue

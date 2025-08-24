@@ -6,7 +6,8 @@ const USER_LABEL_TO_INTERNAL: Record<string, string> = {
 };
 
 function mapToInternalLabel(label: string): string {
-  return USER_LABEL_TO_INTERNAL[label] || label;
+  const key = String(label ?? '');
+  return USER_LABEL_TO_INTERNAL[key] || key;
 }
 
 type ExtractSpec = {
@@ -23,24 +24,30 @@ export function buildNestedFilter(filters: Filter[], extract?: ExtractSpec): any
     (extract?.fields ?? []).map(({ name, type }) => [mapToInternalLabel(name), type])
   );
 
-  const convertOp = (op: string | undefined): string => {
+  const norm = (s?: string) =>
+    String(s ?? '')
+      .toLowerCase()
+      .replace(/_/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const NEGATIVE_OPS = new Set(['!=', 'not in', 'not contains', 'not regex']);
+
+  const convertOp = (raw: string | undefined): string => {
+    const op = norm(raw);
     switch (op) {
       case '=':
-        return 'eq';
       case '!=':
-        return 'neq';
+        return 'eq';
       case 'in':
+      case 'not in':
         return 'in';
-      case 'not_in':
-        return 'not_in';
       case 'contains':
-        return 'contains';
       case 'not contains':
-        return 'not_contains';
+        return 'contains';
       case 'regex':
-        return 'regex';
       case 'not regex':
-        return 'not_regex';
+        return 'regex';
       case 'has':
         return 'has';
       case '>':
@@ -56,11 +63,12 @@ export function buildNestedFilter(filters: Filter[], extract?: ExtractSpec): any
     }
   };
 
+  const isNegative = (raw: string | undefined) => NEGATIVE_OPS.has(norm(raw));
+
   const convertFilter = (f: Filter) => {
     const k = mapToInternalLabel(f.tag);
     const extractedType = extractedByInternalName.get(k);
-
-    return {
+    const base = {
       k,
       v: f.value,
       op: convertOp(f.op),
@@ -68,6 +76,7 @@ export function buildNestedFilter(filters: Filter[], extract?: ExtractSpec): any
       extracted: f.extracted !== undefined ? !!f.extracted : extractedByInternalName.has(k),
       computed: !!f.computed,
     };
+    return isNegative(f.op) ? { not: base } : base;
   };
 
   if (filters.length === 1) {
