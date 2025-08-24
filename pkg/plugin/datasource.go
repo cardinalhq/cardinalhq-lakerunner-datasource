@@ -504,19 +504,29 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 	if len(incoming.Body) > 0 && string(incoming.Body) != "null" {
 		bodyReader = bytes.NewReader(incoming.Body)
 	}
+	isMeta := strings.Contains(incoming.Path, "/api/v1/metricMetadata")
+	method := http.MethodPost
+	if isMeta {
+		method = http.MethodGet
+		bodyReader = nil
+	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bodyReader)
+	httpReq, err := http.NewRequestWithContext(ctx, method, fullURL, bodyReader)
 	if err != nil {
 		return sender.Send(&backend.CallResourceResponse{Status: http.StatusBadGateway, Body: []byte("Failed to build request")})
 	}
 	httpReq.Header.Set("api-key", config.Secrets.ApiKey)
-	httpReq.Header.Set("Accept", "text/event-stream")
-	httpReq.Header.Set("Accept-Encoding", "identity") // avoid gzip for SSE
+	if isMeta {
+		httpReq.Header.Set("Accept", "*/*")
+	} else {
+		httpReq.Header.Set("Accept", "text/event-stream")
+		httpReq.Header.Set("Accept-Encoding", "identity")
+		httpReq.Header.Set("Cache-Control", "no-cache")
+		httpReq.Header.Set("Connection", "keep-alive")
+	}
 	if bodyReader != nil {
 		httpReq.Header.Set("Content-Type", "application/json")
 	}
-	httpReq.Header.Set("Cache-Control", "no-cache")
-	httpReq.Header.Set("Connection", "keep-alive")
 
 	resp, err := httpClient.Do(httpReq)
 	if err != nil {

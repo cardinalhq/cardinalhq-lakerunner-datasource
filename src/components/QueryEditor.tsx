@@ -1,9 +1,20 @@
 import { QueryEditorProps } from '@grafana/data';
-import { Collapse, Combobox, Icon, InlineField, InlineFieldRow, LinkButton, Spinner, Tab, TabsBar } from '@grafana/ui';
+import {
+  Collapse,
+  Combobox,
+  Icon,
+  InlineField,
+  InlineFieldRow,
+  LinkButton,
+  Select,
+  Spinner,
+  Tab,
+  TabsBar,
+} from '@grafana/ui';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DataSource } from '../datasource';
 import { fetchMetricNames, toInternalLabel } from '../services/logs';
-import { AGGREGATE_OPTIONS, Aggregation, Filter, MyDataSourceOptions, MyQuery, Operator } from '../types';
+import { AGGREGATE_OPTIONS, Aggregation, Filter, MyDataSourceOptions, MyQuery, Operator, ValueAs } from '../types';
 import { FilterRow } from './FilterRow';
 import { useLogFingerprints } from '../hooks/useLogFingerprints';
 import { SelectedLogModal } from './SelectedLogModal';
@@ -12,6 +23,26 @@ import Promql from './PromQL';
 import { promqlFromGraphPayload } from '../util/PromqlBuilder';
 import { buildNestedFilter } from '../util/buildNestedFilter';
 import { PrismPromQLEditor } from './PrismEditor';
+
+type MetricKind = 'gauge' | 'sum' | 'histogram' | 'counter' | 'summary';
+type UiMetricType = MyQuery['metricType'];
+type Mode = 'logs' | 'metrics' | 'promQL' | 'traces';
+
+const toUiMetricType = (k?: MetricKind): UiMetricType => {
+  switch (k) {
+    case 'gauge':
+      return 'gauge';
+    case 'histogram':
+      return 'histogram';
+    case 'sum':
+    case 'counter':
+      return 'rate';
+    case 'summary':
+      return 'histogram';
+    default:
+      return undefined;
+  }
+};
 
 export function QueryEditor({
   query,
@@ -31,10 +62,12 @@ export function QueryEditor({
   const previousFiltersRef = useRef<Filter[]>([]);
   const [chartField, setChartField] = useState<string | null>(query.chartField ?? null);
   const [chartAggregation, setChartAggregation] = useState<Aggregation>(query.chartAggregation ?? 'sum');
-  const [aggregation, setAggregation] = useState<Aggregation>(query.aggregation ?? 'sum');
+  const [aggregation, setAggregation] = useState<Aggregation>(
+    query.aggregation ?? (query.metricType === 'rate' ? 'sum' : 'max')
+  );
   const [extractedNumericFields, setExtractedNumericFields] = useState<string[]>([]);
-  const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: 'gauge' }>>([]);
-  const hasLoadedMetrics = useRef(false);
+  const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: MetricKind }>>([]);
+  const lastMetricsKeyRef = useRef<string>('');
   const { bodies, isLoading: bodiesLoading } = useLogFingerprints(datasource, query.refId);
   const filters: Filter[] = useMemo(() => {
     const remaining = query.filters?.filter((f) => f.tag !== '_cardinalhq.name') ?? [];
@@ -48,14 +81,15 @@ export function QueryEditor({
     startTime: query.timeFrom ?? range?.from?.valueOf(),
     endTime: query.timeTo ?? range?.to?.valueOf(),
   });
+
   useEffect(() => {
     if (!showPromql && (query.mode ?? 'logs') === 'promQL') {
       onChange({ ...query, mode: 'logs' });
     }
   }, [onChange, query, showPromql]);
-  type Mode = 'logs' | 'metrics' | 'promQL' | 'traces';
   const promqlSubTab: 'builder' | 'AI-assisted' = query.promqlSubTab ?? 'builder';
   const isPromqlMode = showPromql && (query.mode ?? 'logs') === 'promQL';
+
   const isMetricsMode = query.mode === 'metrics' || (isPromqlMode && promqlSubTab === 'builder');
   const isTracesMode = query.mode === 'traces';
 
@@ -79,25 +113,27 @@ export function QueryEditor({
   }, [range?.from, range?.to, query.timeFrom, query.timeTo]);
 
   useEffect(() => {
-    if (!isMetricsMode || hasLoadedMetrics.current) {
+    if (!isMetricsMode) {
       return;
     }
+
+    if (lastMetricsKeyRef.current === 'metrics-init') {
+      return;
+    }
+
     const controller = new AbortController();
     fetchMetricNames({
       datasourceId: datasource.id,
-      startTime: timeRange.startTime,
-      endTime: timeRange.endTime,
       signal: controller.signal,
       setIsWaiting,
     })
       .then((metrics) => {
-        setMetricOptions(metrics.sort((a, b) => a.metricName.localeCompare(b.metricName)));
-        hasLoadedMetrics.current = true;
+        setMetricOptions(metrics);
+        lastMetricsKeyRef.current = 'metrics-init';
       })
       .catch(() => {});
     return () => controller.abort();
-  }, [datasource.id, isMetricsMode, timeRange.startTime, timeRange.endTime]);
-
+  }, [datasource.id, isMetricsMode, setIsWaiting]);
   useEffect(() => {
     const selections = query.extractor?.selections ?? [];
     const numericFields = selections
@@ -159,6 +195,44 @@ export function QueryEditor({
     setLabelsRefreshKey((k) => k + 1);
   };
 
+  useEffect(() => {
+    if (!isMetricsMode) {
+      return;
+    }
+
+    const want: Aggregation | undefined =
+      query.metricType === 'rate'
+        ? 'sum'
+        : query.metricType === 'gauge' || query.metricType === 'histogram'
+        ? 'max'
+        : undefined;
+
+    if (want) {
+      setAggregation(want);
+    }
+  }, [isMetricsMode, query.metricType]);
+
+  useEffect(() => {
+    if (!isMetricsMode) {
+      return;
+    }
+
+    if (!query.valueAs) {
+      onChange({ ...query, valueAs: query.metricType === 'rate' ? 'counts' : 'values' });
+      return;
+    }
+
+    if (query.metricType === 'rate') {
+      if (!(query.valueAs === 'counts' || query.valueAs === 'rates_per_second')) {
+        onChange({ ...query, valueAs: 'counts' });
+      }
+    } else {
+      if (query.valueAs !== 'values') {
+        onChange({ ...query, valueAs: 'values' });
+      }
+    }
+  }, [isMetricsMode, onChange, query, query.metricType]);
+
   const promqlPreview = useMemo(() => {
     if (!(isPromqlMode && promqlSubTab === 'builder')) {
       return '';
@@ -178,22 +252,39 @@ export function QueryEditor({
       return '';
     }
 
+    const valueAs: ValueAs = (query.valueAs ?? (query.metricType === 'rate' ? 'counts' : 'values')) as ValueAs;
+
+    const effAggregation: Aggregation = query.metricType === 'rate' ? 'sum' : query.aggregation ?? 'max';
+
+    const effRollup: Aggregation = query.metricType === 'rate' ? 'avg' : query.aggregation ?? 'sum';
+
+    const effType = query.metricType === 'rate' ? (valueAs === 'rates_per_second' ? 'rate' : 'count') : 'count';
+
     const expression: any = {
       dataset: 'metrics',
       returnResults: true,
       filter: nested,
       metricType: query.metricType,
       chart: {
-        aggregation: query.aggregation ?? 'sum',
-        rollup: query.aggregation ?? 'sum',
+        aggregation: effAggregation,
+        rollup: effRollup,
         groupBys: (query.groupBy ?? []).map(toInternalLabel),
-        type: 'count',
+        type: effType,
       },
     };
 
     const payload = { baseExpressions: { a: expression } };
     return promqlFromGraphPayload(payload) ?? '';
-  }, [isPromqlMode, promqlSubTab, query.metricName, query.metricType, query.filters, query.groupBy, query.aggregation]);
+  }, [
+    isPromqlMode,
+    promqlSubTab,
+    query.metricName,
+    query.metricType,
+    query.filters,
+    query.groupBy,
+    query.aggregation,
+    query.valueAs,
+  ]);
 
   useEffect(() => {
     const next = promqlPreview || '';
@@ -211,12 +302,17 @@ export function QueryEditor({
     }
   }, [promqlPreview, promqlDirty, isPromqlMode, promqlSubTab]);
 
+  const filtersByModeRef = useRef<Record<Mode, Filter[]>>({
+    logs: [],
+    metrics: [],
+    promQL: [],
+    traces: [],
+  });
+
   useEffect(() => {
-    if ((query.mode ?? 'logs') === 'promQL' && (query.promqlSubTab ?? 'builder') === 'builder' && !promqlDirty) {
-      setPromqlDraft(promqlPreview || '');
-      prevBuilderRef.current = promqlPreview || '';
-    }
-  }, [query.mode, query.promqlSubTab, promqlPreview, promqlDirty]);
+    const mode = (query.mode ?? 'logs') as Mode;
+    filtersByModeRef.current[mode] = filters;
+  }, [filters, query.mode]);
 
   const availableTabs = useMemo<Mode[]>(() => {
     const tabs: Mode[] = ['logs', 'metrics'];
@@ -262,6 +358,7 @@ export function QueryEditor({
                 if (mode === 'promQL' && !showPromql) {
                   return;
                 }
+
                 const targetMode = mode;
                 const wantDefaultFilter = targetMode !== 'promQL' || promqlSubTab === 'builder';
                 onChange({
@@ -273,6 +370,7 @@ export function QueryEditor({
                   extractor: undefined,
                   metricName: undefined,
                   metricType: undefined,
+                  valueAs: undefined,
                 });
               }}
             />
@@ -283,19 +381,18 @@ export function QueryEditor({
       {isMetricsMode && !isPromqlMode && (
         <InlineFieldRow>
           <InlineField label="Metric Name">
-            <Combobox
+            <Select
               placeholder="Select a metric"
               options={metricOptions.map((m) => ({ label: m.metricName, value: m.metricName }))}
               value={query.metricName ? { label: query.metricName, value: query.metricName } : null}
-              createCustomValue
               onChange={(opt) => {
                 const val = opt?.value ?? '';
                 const found = metricOptions.find((m) => m.metricName === val);
-                if (found) {
-                  onChange({ ...query, metricName: found.metricName, metricType: found.metricType });
-                } else {
-                  onChange({ ...query, metricName: val, metricType: undefined });
-                }
+                onChange({
+                  ...query,
+                  metricName: val || undefined,
+                  metricType: toUiMetricType(found?.metricType),
+                });
               }}
               width={40}
             />
@@ -333,6 +430,8 @@ export function QueryEditor({
             metricType={query.metricType}
             aggregation={aggregation}
             updateAggregation={setAggregation}
+            valueAs={isMetricsMode ? query.valueAs : undefined}
+            updateValueAs={isMetricsMode ? (v: any) => onChange({ ...query, valueAs: v }) : undefined}
             setIsWaiting={setIsWaiting}
             extract={query.extractor}
             labelsRefreshKey={labelsRefreshKey}
@@ -408,7 +507,7 @@ export function QueryEditor({
                 <Combobox
                   options={AGGREGATE_OPTIONS}
                   value={chartAggregation}
-                  onChange={(v) => setChartAggregation(v?.value as Aggregation)}
+                  onChange={(v) => setChartAggregation((v?.value as Aggregation) ?? 'sum')}
                   width={20}
                 />
               </InlineField>
@@ -441,24 +540,20 @@ export function QueryEditor({
             <>
               <InlineFieldRow>
                 <InlineField label="Metric Name">
-                  <Combobox
+                  <Select
                     placeholder="Select a metric"
                     options={metricOptions.map((m) => ({ label: m.metricName, value: m.metricName }))}
                     value={query.metricName ? { label: query.metricName, value: query.metricName } : null}
-                    createCustomValue
-                    isClearable
-                    width="auto"
-                    minWidth={20}
-                    maxWidth={40}
                     onChange={(opt) => {
                       const val = opt?.value ?? '';
                       const found = metricOptions.find((m) => m.metricName === val);
-                      if (found) {
-                        onChange({ ...query, metricName: found.metricName, metricType: found.metricType });
-                      } else {
-                        onChange({ ...query, metricName: val, metricType: undefined });
-                      }
+                      onChange({
+                        ...query,
+                        metricName: val || undefined,
+                        metricType: toUiMetricType(found?.metricType),
+                      });
                     }}
+                    width={40}
                   />
                 </InlineField>
               </InlineFieldRow>
@@ -493,6 +588,8 @@ export function QueryEditor({
                   metricType={query.metricType}
                   aggregation={aggregation}
                   updateAggregation={setAggregation}
+                  valueAs={query.valueAs}
+                  updateValueAs={(v) => onChange({ ...query, valueAs: v })}
                   setIsWaiting={setIsWaiting}
                 />
               ))}
@@ -546,7 +643,7 @@ export function QueryEditor({
         </div>
       )}
       <SelectedLogModal
-        logLine={selectedExemplar!}
+        logLine={selectedExemplar ?? ''}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         filters={query.filters || []}

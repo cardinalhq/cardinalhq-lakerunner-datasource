@@ -11,6 +11,7 @@ import {
   OPERATOR_OPTIONS,
   TEXT_OPERATORS,
   NUMERIC_OPERATORS,
+  ValueAs,
 } from '../types';
 import { toInternalLabel } from 'services/logs';
 
@@ -35,6 +36,8 @@ interface FilterRowProps {
   setIsWaiting?: (isWaiting: boolean) => void;
   extract?: { regex: string; fields: string[]; selections?: Array<{ dataType: 'string' | 'number' }> };
   labelsRefreshKey?: number;
+  valueAs?: ValueAs;
+  updateValueAs?: (v: ValueAs) => void;
 }
 
 export const FilterRow = ({
@@ -58,6 +61,8 @@ export const FilterRow = ({
   setIsWaiting,
   extract,
   labelsRefreshKey = 0,
+  valueAs,
+  updateValueAs,
 }: FilterRowProps) => {
   const normalizedExtract = extract
     ? {
@@ -154,6 +159,29 @@ export const FilterRow = ({
         ...groupBy.filter((g) => !tagOptionsBase.some((o) => o.value === g)).map((g) => ({ label: g, value: g })),
       ]
     : tagOptionsBase;
+
+  const aggOptions = useMemo(() => {
+    if (isMetricsMode && metricType === 'rate') {
+      return AGGREGATE_OPTIONS.filter((opt) => opt.value === 'sum');
+    }
+    if (!isMetricsMode) {
+      return AGGREGATE_OPTIONS.filter((opt) => opt.value === 'sum');
+    }
+    return AGGREGATE_OPTIONS;
+  }, [isMetricsMode, metricType]);
+
+  const valueAsOptions = useMemo(() => {
+    if (!isMetricsMode) {
+      return [];
+    }
+    if (metricType === 'rate') {
+      return [
+        { label: 'Counts', value: 'counts' as const },
+        { label: 'Rates / second', value: 'rates_per_second' as const },
+      ];
+    }
+    return [{ label: 'Values', value: 'values' as const }];
+  }, [isMetricsMode, metricType]);
 
   return (
     <>
@@ -292,11 +320,32 @@ export const FilterRow = ({
           <InlineField label="Aggregation">
             <Combobox
               placeholder="Aggregation"
-              options={isMetricsMode ? AGGREGATE_OPTIONS : AGGREGATE_OPTIONS.filter((opt) => opt.value === 'sum')}
+              options={aggOptions}
               value={aggregation}
               onChange={(v) => updateAggregation((v?.value ?? '') as Aggregation)}
             />
           </InlineField>
+          {isMetricsMode && (
+            <InlineField label="Value as" style={{ marginLeft: 8 }}>
+              <Select
+                placeholder="Select"
+                options={valueAsOptions}
+                value={
+                  valueAs
+                    ? {
+                        label: valueAsOptions.find((o) => o.value === valueAs)?.label ?? '',
+                        value: valueAs,
+                      }
+                    : null
+                }
+                onChange={(v) => {
+                  const next = (v?.value as ValueAs) ?? ((metricType === 'rate' ? 'counts' : 'values') as ValueAs);
+                  updateValueAs?.(next);
+                }}
+                width={20}
+              />
+            </InlineField>
+          )}
         </InlineFieldRow>
       )}
     </>

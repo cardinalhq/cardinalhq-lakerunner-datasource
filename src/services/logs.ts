@@ -350,10 +350,40 @@ export async function fetchTagValues({
   return Array.from(vals);
 }
 
+type MetricKind = 'gauge' | 'sum' | 'histogram' | 'counter' | 'summary';
+
+const normalizeKind = (raw: any): MetricKind => {
+  const v = String(raw ?? '').toLowerCase();
+  if (v === 'gauge') {
+    return 'gauge';
+  }
+  if (v === 'sum' || v === 'counter') {
+    return v as MetricKind;
+  }
+  if (v === 'histogram') {
+    return 'histogram';
+  }
+  if (v === 'summary') {
+    return 'summary';
+  }
+  return 'gauge';
+};
+
+async function fetchJsonOnce<T = any>(datasourceId: number, path: string, signal?: AbortSignal): Promise<T | null> {
+  const res = await fetch(`/api/datasources/${datasourceId}/resources/proxy-query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+    signal,
+  });
+  if (!res.ok) {
+    return null;
+  }
+  return (await res.json()) as T;
+}
+
 export async function fetchMetricNames({
   datasourceId,
-  startTime,
-  endTime,
   signal,
   setIsWaiting,
 }: {
@@ -362,26 +392,35 @@ export async function fetchMetricNames({
   endTime?: number;
   signal?: AbortSignal;
   setIsWaiting?: (isWaiting: boolean) => void;
-}): Promise<Array<{ metricName: string; metricType: 'gauge' }>> {
-  const metrics = new Set<string>();
-  const path = `/api/v1/tags/metrics?s=${startTime}&e=${endTime}&tagName=_cardinalhq.name&dataType=string`;
+}): Promise<Array<{ metricName: string; metricType: MetricKind }>> {
+  let path = `/api/v1/metricMetadata`;
 
-  await streamJsonCollect(
-    datasourceId,
-    path,
-    undefined,
-    (msg) => {
-      const name = msg?.['_cardinalhq.name'];
-      if (name) {
-        metrics.add(name);
+  try {
+    setIsWaiting?.(true);
+    const data = await fetchJsonOnce<any>(datasourceId, path, signal);
+
+    const seen = new Map<string, { metricName: string; metricType: MetricKind }>();
+
+    if (Array.isArray(data)) {
+      for (const m of data) {
+        const name = m?.metricName;
+        if (!name || seen.has(name)) {
+          continue;
+        }
+        seen.set(name, { metricName: String(name), metricType: normalizeKind(m?.metricType) });
       }
-    },
-    signal,
-    setIsWaiting
-  );
+    } else if (data && typeof data === 'object' && Array.isArray((data as any).items)) {
+      for (const m of (data as any).items) {
+        const name = m?.metricName;
+        if (!name || seen.has(name)) {
+          continue;
+        }
+        seen.set(name, { metricName: String(name), metricType: normalizeKind(m?.metricType) });
+      }
+    }
 
-  return Array.from(metrics).map((metricName) => ({
-    metricName,
-    metricType: 'gauge',
-  }));
+    return [...seen.values()].sort((a, b) => a.metricName.localeCompare(b.metricName));
+  } finally {
+    setIsWaiting?.(false);
+  }
 }

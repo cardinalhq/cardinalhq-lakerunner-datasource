@@ -580,11 +580,17 @@ export class DataSource
       target.extractor?.selections?.some((sel) => sel.label === chartField && sel.dataType === 'number');
 
     if (isMetrics) {
+      const metricType = target.metricType;
+      const valueAs = target.valueAs ?? (metricType === 'rate' ? 'counts' : 'values');
+      const effAggregation = metricType === 'rate' ? 'sum' : normalAggregation;
+      const effRollup = metricType === 'rate' ? 'avg' : normalAggregation;
+      const effType = metricType === 'rate' ? (valueAs === 'rates_per_second' ? 'rate' : 'count') : 'count';
+
       expression.chart = {
-        aggregation: normalAggregation,
-        rollup: normalAggregation,
+        aggregation: effAggregation,
+        rollup: effRollup,
         groupBys: groupBy,
-        type: 'count',
+        type: effType,
       };
     } else if (isTrace) {
       expression.chart = {

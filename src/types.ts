@@ -15,7 +15,7 @@ export type Operator =
   | '<'
   | '>='
   | '<=';
-
+export type ValueAs = 'values' | 'counts' | 'rates_per_second';
 export const OPERATOR_OPTIONS: Array<{ label: string; value: Operator }> = [
   { label: '=', value: '=' },
   { label: '!=', value: '!=' },
@@ -64,6 +64,7 @@ export interface MyQuery extends DataQuery {
   promqlOutput?: string;
   selectedExemplar?: string | null;
   chartField?: string;
+  valueAs?: ValueAs;
   promqlSubTab?: 'builder' | 'AI-assisted';
   extractor?: {
     regex: string;
