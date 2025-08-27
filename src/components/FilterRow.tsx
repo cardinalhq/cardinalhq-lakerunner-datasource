@@ -161,7 +161,7 @@ export const FilterRow = ({
     : tagOptionsBase;
 
   const aggOptions = useMemo(() => {
-    if (isMetricsMode && metricType === 'rate') {
+    if (isMetricsMode && metricType === 'count') {
       return AGGREGATE_OPTIONS.filter((opt) => opt.value === 'sum');
     }
     if (!isMetricsMode) {
@@ -174,7 +174,7 @@ export const FilterRow = ({
     if (!isMetricsMode) {
       return [];
     }
-    if (metricType === 'rate') {
+    if (metricType === 'count') {
       return [
         { label: 'Counts', value: 'counts' as const },
         { label: 'Rates / second', value: 'rates_per_second' as const },
@@ -339,7 +339,7 @@ export const FilterRow = ({
                     : null
                 }
                 onChange={(v) => {
-                  const next = (v?.value as ValueAs) ?? ((metricType === 'rate' ? 'counts' : 'values') as ValueAs);
+                  const next = (v?.value as ValueAs) ?? ((metricType === 'count' ? 'counts' : 'values') as ValueAs);
                   updateValueAs?.(next);
                 }}
                 width={20}

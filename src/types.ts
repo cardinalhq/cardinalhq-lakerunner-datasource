@@ -54,7 +54,7 @@ export interface MyQuery extends DataQuery {
   constant?: number;
   mode?: 'logs' | 'metrics' | 'promQL' | 'traces';
   metricName?: string;
-  metricType?: 'gauge' | 'rate' | 'histogram';
+  metricType?: 'gauge' | 'count' | 'histogram';
   timeFrom?: number;
   timeTo?: number;
   chartAggregation?: ChartAggregation;

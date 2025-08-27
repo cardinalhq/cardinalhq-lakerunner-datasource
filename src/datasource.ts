@@ -581,10 +581,10 @@ export class DataSource
 
     if (isMetrics) {
       const metricType = target.metricType;
-      const valueAs = target.valueAs ?? (metricType === 'rate' ? 'counts' : 'values');
-      const effAggregation = metricType === 'rate' ? 'sum' : normalAggregation;
-      const effRollup = metricType === 'rate' ? 'avg' : normalAggregation;
-      const effType = metricType === 'rate' ? (valueAs === 'rates_per_second' ? 'rate' : 'count') : 'count';
+      const valueAs = target.valueAs ?? (metricType === 'count' ? 'counts' : 'values');
+      const effAggregation = metricType === 'count' ? 'sum' : normalAggregation;
+      const effRollup = metricType === 'count' ? 'avg' : normalAggregation;
+      const effType = metricType === 'count' ? (valueAs === 'rates_per_second' ? 'rate' : 'count') : 'count';
 
       expression.chart = {
         aggregation: effAggregation,

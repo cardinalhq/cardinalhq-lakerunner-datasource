@@ -36,7 +36,7 @@ const toUiMetricType = (k?: MetricKind): UiMetricType => {
       return 'histogram';
     case 'sum':
     case 'counter':
-      return 'rate';
+      return 'count';
     case 'summary':
       return 'histogram';
     default:
@@ -63,7 +63,7 @@ export function QueryEditor({
   const [chartField, setChartField] = useState<string | null>(query.chartField ?? null);
   const [chartAggregation, setChartAggregation] = useState<Aggregation>(query.chartAggregation ?? 'sum');
   const [aggregation, setAggregation] = useState<Aggregation>(
-    query.aggregation ?? (query.metricType === 'rate' ? 'sum' : 'max')
+    query.aggregation ?? (query.metricType === 'count' ? 'sum' : 'max')
   );
   const [extractedNumericFields, setExtractedNumericFields] = useState<string[]>([]);
   const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: MetricKind }>>([]);
@@ -201,7 +201,7 @@ export function QueryEditor({
     }
 
     const want: Aggregation | undefined =
-      query.metricType === 'rate'
+      query.metricType === 'count'
         ? 'sum'
         : query.metricType === 'gauge' || query.metricType === 'histogram'
         ? 'max'
@@ -218,11 +218,11 @@ export function QueryEditor({
     }
 
     if (!query.valueAs) {
-      onChange({ ...query, valueAs: query.metricType === 'rate' ? 'counts' : 'values' });
+      onChange({ ...query, valueAs: query.metricType === 'count' ? 'counts' : 'values' });
       return;
     }
 
-    if (query.metricType === 'rate') {
+    if (query.metricType === 'count') {
       if (!(query.valueAs === 'counts' || query.valueAs === 'rates_per_second')) {
         onChange({ ...query, valueAs: 'counts' });
       }
@@ -252,13 +252,13 @@ export function QueryEditor({
       return '';
     }
 
-    const valueAs: ValueAs = (query.valueAs ?? (query.metricType === 'rate' ? 'counts' : 'values')) as ValueAs;
+    const valueAs: ValueAs = (query.valueAs ?? (query.metricType === 'count' ? 'counts' : 'values')) as ValueAs;
 
-    const effAggregation: Aggregation = query.metricType === 'rate' ? 'sum' : query.aggregation ?? 'max';
+    const effAggregation: Aggregation = query.metricType === 'count' ? 'sum' : query.aggregation ?? 'max';
 
-    const effRollup: Aggregation = query.metricType === 'rate' ? 'avg' : query.aggregation ?? 'sum';
+    const effRollup: Aggregation = query.metricType === 'count' ? 'sum' : query.aggregation ?? 'sum';
 
-    const effType = query.metricType === 'rate' ? (valueAs === 'rates_per_second' ? 'rate' : 'count') : 'count';
+    const effType = query.metricType === 'count' ? (valueAs === 'rates_per_second' ? 'rate' : 'count') : 'count';
 
     const expression: any = {
       dataset: 'metrics',
