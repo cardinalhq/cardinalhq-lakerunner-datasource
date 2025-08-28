@@ -14,6 +14,7 @@ interface LogLineExtractionMatch {
 
 interface SelectedLogModalProps {
   logLine: any;
+  fingerprint?: string;
   isOpen: boolean;
   onClose: () => void;
   filters: any[];
@@ -43,6 +44,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
   extractor,
   datasourceId,
   onExtractionApply,
+  fingerprint,
 }) => {
   const theme = useTheme();
   const pluginId = 'cardinalhq-lakerunner-datasource';
@@ -238,21 +240,18 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
     const queryFilter = {
       op: 'and',
       q1: baseFilter,
-      ...Object.fromEntries(
-        queryExtractorParams.selections
-          .filter((s) => s.userSelected)
-          .map((ext, i) => [
-            `q${i + 2}`,
-            {
-              k: ext.label || `var_${i}`,
-              v: [''],
-              op: 'has',
-              dataType: ext.dataType,
-              extracted: true,
+      ...(fingerprint
+        ? {
+            q2: {
+              k: '_cardinalhq.fingerprint',
+              v: [String(fingerprint)],
+              op: 'eq',
+              dataType: 'string',
+              extracted: false,
               computed: false,
             },
-          ])
-      ),
+          }
+        : {}),
     };
     const extract = {
       regex: queryExtractorParams.regex,
@@ -285,17 +284,20 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: `/api/v1/graph?${params.toString()}`, body: payload }),
       });
-      const tagFilters = queryExtractorParams.selections
-        .filter((s) => s.userSelected)
-        .map(({ label, dataType }, i) => ({
-          tag: label || `var_${i}`,
-          op: 'has',
-          value: [''],
-          dataType,
-          extracted: true,
-          computed: false,
-        }));
-
+      const tagFilters = [
+        ...(fingerprint
+          ? [
+              {
+                tag: '_cardinalhq.fingerprint',
+                op: '=',
+                value: [String(fingerprint)],
+                dataType: 'string',
+                extracted: false,
+                computed: false,
+              },
+            ]
+          : []),
+      ];
       onExtractionApply?.(
         {
           regex: queryExtractorParams.regex,

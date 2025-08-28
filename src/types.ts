@@ -63,6 +63,7 @@ export interface MyQuery extends DataQuery {
   promqlDescription?: string;
   promqlOutput?: string;
   selectedExemplar?: string | null;
+  selectedFingerprint?: string;
   chartField?: string;
   valueAs?: ValueAs;
   promqlSubTab?: 'builder' | 'AI-assisted';

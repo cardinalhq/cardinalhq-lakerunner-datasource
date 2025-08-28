@@ -38,6 +38,7 @@ interface FilterRowProps {
   labelsRefreshKey?: number;
   valueAs?: ValueAs;
   updateValueAs?: (v: ValueAs) => void;
+  fingerprint?: string;
 }
 
 export const FilterRow = ({
@@ -63,6 +64,7 @@ export const FilterRow = ({
   labelsRefreshKey = 0,
   valueAs,
   updateValueAs,
+  fingerprint,
 }: FilterRowProps) => {
   const normalizedExtract = extract
     ? {
@@ -88,6 +90,20 @@ export const FilterRow = ({
 
   const isTextOperator = !isNumericTag && TEXT_OPERATORS.includes(filter.op);
   const isMultiValueOperator = !isNumericTag && (filter.op === 'in' || filter.op === 'not_in');
+  const systemFilters = useMemo<Filter[]>(() => {
+    const arr: Filter[] = [];
+    if (fingerprint && fingerprint.trim()) {
+      arr.push({
+        tag: '_cardinalhq.fingerprint',
+        op: 'eq',
+        value: [fingerprint],
+        dataType: 'string',
+        extracted: false,
+        computed: false,
+      } as unknown as Filter);
+    }
+    return arr;
+  }, [fingerprint]);
   const scopedFilters = useMemo(() => {
     const isValid = (f: Filter) => !!f.tag?.trim() && Array.isArray(f.value) && f.value.some((v) => !!v?.trim());
     const currentInternal = toInternalLabel(filter.tag || '');
@@ -96,12 +112,18 @@ export const FilterRow = ({
       .filter(isValid)
       .filter((f) => toInternalLabel(f.tag || '') !== currentInternal);
   }, [filters, index, filter.tag]);
+
+  const effectiveFilters = useMemo<Filter[]>(() => {
+    const seen = new Set(scopedFilters.map((f) => toInternalLabel(f.tag || '')));
+    const extras = systemFilters.filter((f) => !seen.has(toInternalLabel(f.tag || '')));
+    return [...scopedFilters, ...extras];
+  }, [scopedFilters, systemFilters]);
   const shouldRunValues = !!filter.tag?.trim() && (!isMetricsMode || !!metricName) && !isNumericTag;
 
   const { data: values = [], isLoading: loadingValues } = useLabelValues({
     datasource,
     labelName: filter.tag,
-    filters: scopedFilters,
+    filters: effectiveFilters,
     enabled: shouldRunValues,
     mode,
     metricName,
@@ -113,7 +135,7 @@ export const FilterRow = ({
   });
   const { data: groupByLabels = [], isLoading: loadingGroupByLabels } = useLabels({
     datasource,
-    filters: scopedFilters,
+    filters: effectiveFilters,
     enabled: !isMetricsMode || !!metricName,
     mode,
     startTime,

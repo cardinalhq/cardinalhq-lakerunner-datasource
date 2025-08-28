@@ -440,9 +440,9 @@ export class DataSource
       return isKeyValid && isValueValid;
     });
 
-    const hasValidExtractor = !!target.extractor?.regex && Array.isArray(target.extractor?.fields);
+    // const hasValidExtractor = !!target.extractor?.regex && Array.isArray(target.extractor?.fields);
     const hasMetricName = !!target.metricName;
-    const hasFilters = filters.length > 0;
+    // const hasFilters = filters.length > 0;
     const HIGHLIGHT_OPS = new Set<string>(['contains', ...TEXT_OPERATORS]);
 
     const MESSAGE_KEYS = new Set<string>(['_cardinalhq.message', 'log.message', 'message']);
@@ -475,20 +475,16 @@ export class DataSource
       )
     ).slice(0, 20);
 
-    if (!isMetrics && !hasFilters && !hasValidExtractor && !isTrace) {
+    const hasEqualityScope = filters.some((f) => (f.op === '=' || f.op === 'in') && String(f.tag || '').trim() !== '');
+
+    if (!isMetrics && !hasEqualityScope) {
       filters.push({
         tag: 'resource.service.name',
         op: 'has',
         value: [''],
       });
     }
-    if (isTrace) {
-      filters.push({
-        tag: 'resource.service.name',
-        op: 'has',
-        value: [''],
-      });
-    }
+
     if (isMetrics && !hasMetricName) {
       return [];
     }
@@ -505,7 +501,19 @@ export class DataSource
         value: [target.metricName],
       });
     }
-
+    if (target.selectedFingerprint && target.extractor) {
+      const alreadyHasFp = filters.some((f) => toInternalLabel(f.tag || '') === '_cardinalhq.fingerprint');
+      if (!alreadyHasFp) {
+        filters.unshift({
+          tag: '_cardinalhq.fingerprint',
+          op: '=',
+          value: [String(target.selectedFingerprint)],
+          dataType: 'string',
+          extracted: false,
+          computed: false,
+        });
+      }
+    }
     let allFilters = [...filters];
 
     if (target.extractor?.selections?.length) {
@@ -537,7 +545,7 @@ export class DataSource
 
     if (!nestedFilter && !isMetrics) {
       nestedFilter = {
-        k: '_cardinalhq.name',
+        k: 'resource.service.name',
         v: [''],
         op: 'has',
         dataType: 'string',
@@ -1088,7 +1096,7 @@ export class DataSource
             emitCount++;
           } else if (parsed.type === 'event' && isTrace) {
             const ts = msg.timestamp;
-            const fingerprint = msg.tags?.['_cardinalhq.fingerprint'] || '';
+            const fingerprint = String(msg.tags?.['_cardinalhq.fingerprint'] ?? '');
             const level = msg.tags?.['_cardinalhq.level'] || '';
             const message = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
 

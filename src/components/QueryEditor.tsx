@@ -68,11 +68,14 @@ export function QueryEditor({
   const [extractedNumericFields, setExtractedNumericFields] = useState<string[]>([]);
   const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: MetricKind }>>([]);
   const lastMetricsKeyRef = useRef<string>('');
-  const { bodies, isLoading: bodiesLoading } = useLogFingerprints(datasource, query.refId);
+  const { bodies, fingerprints } = useLogFingerprints(datasource, query.refId);
+
   const filters: Filter[] = useMemo(() => {
-    const remaining = query.filters?.filter((f) => f.tag !== '_cardinalhq.name') ?? [];
+    const remaining =
+      query.filters?.filter((f) => f.tag !== '_cardinalhq.name' && f.tag !== '_cardinalhq.fingerprint') ?? [];
     return remaining.length > 0 ? remaining : [{ tag: '', op: '=' as Operator, value: [''] }];
   }, [query.filters]);
+
   const [promqlDraft, setPromqlDraft] = useState('');
   const [promqlDirty, setPromqlDirty] = useState(false);
   const prevBuilderRef = useRef<string>('');
@@ -82,11 +85,28 @@ export function QueryEditor({
     endTime: query.timeTo ?? range?.to?.valueOf(),
   });
 
+  const exemplarOptions = useMemo(
+    () =>
+      bodies.map((b, i) => {
+        const fp = fingerprints[i];
+        const id = fp ? `fp:${fp}` : `body:${b}`;
+        return { label: b, value: id };
+      }),
+    [bodies, fingerprints]
+  );
+
+  const selectedId = query.selectedFingerprint
+    ? `fp:${query.selectedFingerprint}`
+    : selectedExemplar
+    ? `body:${selectedExemplar}`
+    : undefined;
+
   useEffect(() => {
     if (!showPromql && (query.mode ?? 'logs') === 'promQL') {
       onChange({ ...query, mode: 'logs' });
     }
   }, [onChange, query, showPromql]);
+
   const promqlSubTab: 'builder' | 'AI-assisted' = query.promqlSubTab ?? 'builder';
   const isPromqlMode = showPromql && (query.mode ?? 'logs') === 'promQL';
 
@@ -122,6 +142,7 @@ export function QueryEditor({
     }
 
     const controller = new AbortController();
+
     fetchMetricNames({
       datasourceId: datasource.id,
       signal: controller.signal,
@@ -134,6 +155,7 @@ export function QueryEditor({
       .catch(() => {});
     return () => controller.abort();
   }, [datasource.id, isMetricsMode, setIsWaiting]);
+
   useEffect(() => {
     const selections = query.extractor?.selections ?? [];
     const numericFields = selections
@@ -172,7 +194,9 @@ export function QueryEditor({
     const prevExtractedInternal = new Set(prevExtractedNames.map((n) => toInternalLabel(n)));
     const scrubFilterTag = (tag?: string) => !prevExtractedInternal.has(toInternalLabel(tag || ''));
 
-    const scrubbedFilters = (query.filters ?? []).filter((f) => scrubFilterTag(f.tag));
+    const scrubbedFilters = (query.filters ?? [])
+      .filter((f) => scrubFilterTag(f.tag))
+      .filter((f) => f.tag !== '_cardinalhq.fingerprint');
 
     const scrubbedGroupBy = (query.groupBy ?? []).filter((g) => scrubFilterTag(g));
 
@@ -435,6 +459,7 @@ export function QueryEditor({
             setIsWaiting={setIsWaiting}
             extract={query.extractor}
             labelsRefreshKey={labelsRefreshKey}
+            fingerprint={query.selectedFingerprint}
           />
         ))}
 
@@ -451,16 +476,31 @@ export function QueryEditor({
         >
           <InlineFieldRow>
             <InlineField label="Select Message">
-              <Combobox
-                loading={bodiesLoading}
-                options={bodies.map((b, i) => ({ label: b, value: b }))}
-                value={selectedExemplar ?? ''}
-                onChange={(v) => {
-                  setSelectedExemplar(v.value);
-                  onChange({ ...query, selectedExemplar: v.value });
-                  setIsCollapseOpen(true);
+              <Select
+                placeholder="Select a message"
+                options={exemplarOptions}
+                value={selectedId ? { label: selectedExemplar ?? '', value: selectedId } : null}
+                isClearable
+                width={80}
+                onChange={(opt) => {
+                  if (!opt?.value) {
+                    setSelectedExemplar(null);
+                    onChange({ ...query, selectedExemplar: undefined, selectedFingerprint: undefined });
+                    return;
+                  }
+
+                  const val = String(opt.value);
+                  if (val.startsWith('fp:')) {
+                    const fp = val.slice(3);
+                    const match = bodies[fingerprints.indexOf(fp)];
+                    setSelectedExemplar(match ?? '');
+                    onChange({ ...query, selectedExemplar: match, selectedFingerprint: fp });
+                  } else if (val.startsWith('body:')) {
+                    const body = val.slice(5);
+                    setSelectedExemplar(body);
+                    onChange({ ...query, selectedExemplar: body, selectedFingerprint: undefined });
+                  }
                 }}
-                width={60}
               />
             </InlineField>
             <InlineField>
@@ -645,20 +685,23 @@ export function QueryEditor({
       <SelectedLogModal
         logLine={selectedExemplar ?? ''}
         isOpen={isModalOpen}
+        fingerprint={query.selectedFingerprint ?? ''}
         onClose={() => setIsModalOpen(false)}
         filters={query.filters || []}
         extractor={query.extractor}
         timeRange={{ startTime: modalTimeRange?.startTime ?? 0, endTime: modalTimeRange?.endTime ?? 0 }}
         datasourceId={datasource.id}
-        onExtractionApply={(newExtractor) => {
+        onExtractionApply={(newExtractor, newTagFilters) => {
           const numericFields = newExtractor.selections
             .filter((s) => s.dataType === 'number')
             .map((s) => s.label)
             .filter((v, i, self) => v && self.indexOf(v) === i);
+
           const defaultField = numericFields[0] ?? null;
           setExtractedNumericFields(numericFields);
           setChartField(defaultField);
           setChartAggregation('sum');
+
           onChange({
             ...query,
             chartField: defaultField,
@@ -668,7 +711,12 @@ export function QueryEditor({
               fields: newExtractor.fields,
               selections: newExtractor.selections,
             },
+            filters: [
+              ...(query.filters ?? []).filter((f) => f.tag !== '_cardinalhq.fingerprint'),
+              ...(newTagFilters ?? []),
+            ],
           });
+
           setLabelsRefreshKey((v) => v + 1);
           setIsCollapseOpen(true);
           onRunQuery();
