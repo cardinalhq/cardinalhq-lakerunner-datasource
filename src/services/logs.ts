@@ -404,53 +404,60 @@ export async function fetchMetricNames({
   setIsWaiting?: (isWaiting: boolean) => void;
 }): Promise<Array<{ metricName: string; metricType: MetricKind }>> {
   const seen = new Map<string, { metricName: string; metricType: MetricKind }>();
+
+  const parseMetadata = (data: any) => {
+    if (Array.isArray(data)) {
+      return data;
+    }
+    if (data && typeof data === 'object' && Array.isArray(data.items)) {
+      return data.items;
+    }
+    return [];
+  };
+
+  const streamPath = `/api/v1/tags/metrics?s=${startTime}&e=${endTime}&tagName=_cardinalhq.name&dataType=string`;
+
+  const streamNames = async (): Promise<Set<string>> => {
+    const names = new Set<string>();
+    await streamJsonCollect(
+      datasourceId,
+      streamPath,
+      undefined,
+      (msg) => {
+        const name = msg?.['_cardinalhq.name'];
+        if (name) {
+          names.add(String(name));
+        }
+      },
+      signal,
+      setIsWaiting
+    );
+    return names;
+  };
+
   try {
     setIsWaiting?.(true);
 
-    let metadataOk = false;
-    try {
-      const data = await fetchJsonOnce<any>(datasourceId, `/api/v1/metricMetadata`, signal);
-      if (Array.isArray(data)) {
-        for (const m of data) {
-          const name = m?.metricName;
-          if (!name || seen.has(name)) {
-            continue;
-          }
-          seen.set(name, { metricName: String(name), metricType: normalizeKind(m?.metricType) });
+    const [metaRes, streamRes] = await Promise.allSettled([
+      fetchJsonOnce<any>(datasourceId, `/api/v1/metricMetadata`, signal),
+      streamNames(),
+    ]);
+
+    if (metaRes.status === 'fulfilled' && metaRes.value) {
+      for (const m of parseMetadata(metaRes.value)) {
+        const name = m?.metricName;
+        if (!name || seen.has(name)) {
+          continue;
         }
-      } else if (data && typeof data === 'object' && Array.isArray((data as any).items)) {
-        for (const m of (data as any).items) {
-          const name = m?.metricName;
-          if (!name || seen.has(name)) {
-            continue;
-          }
-          seen.set(name, { metricName: String(name), metricType: normalizeKind(m?.metricType) });
-        }
+        seen.set(String(name), {
+          metricName: String(name),
+          metricType: normalizeKind(m?.metricType),
+        });
       }
-      metadataOk = seen.size > 0;
-    } catch {
-      metadataOk = false;
     }
 
-    if (!metadataOk) {
-      const path = `/api/v1/tags/metrics?s=${startTime}&e=${endTime}&tagName=_cardinalhq.name&dataType=string`;
-
-      const names = new Set<string>();
-      await streamJsonCollect(
-        datasourceId,
-        path,
-        undefined,
-        (msg) => {
-          const name = msg?.['_cardinalhq.name'];
-          if (name) {
-            names.add(String(name));
-          }
-        },
-        signal,
-        setIsWaiting
-      );
-
-      for (const name of names) {
+    if (streamRes.status === 'fulfilled') {
+      for (const name of streamRes.value) {
         if (!seen.has(name)) {
           seen.set(name, { metricName: name, metricType: inferKindFromName(name) });
         }
