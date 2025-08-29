@@ -70,6 +70,18 @@ export function QueryEditor({
   const lastMetricsKeyRef = useRef<string>('');
   const { bodies, fingerprints } = useLogFingerprints(datasource, query.refId);
 
+  const defaultAggFor = (mt?: UiMetricType): Aggregation | undefined =>
+    mt === 'count' ? 'sum' : mt === 'gauge' || mt === 'histogram' ? 'max' : undefined;
+
+  const prevMetricRef = useRef<{ type?: UiMetricType; name?: string }>({
+    type: query.metricType,
+    name: query.metricName,
+  });
+
+  const handleAggregationChange = (next: Aggregation) => {
+    setAggregation(next);
+  };
+
   const filters: Filter[] = useMemo(() => {
     const remaining =
       query.filters?.filter((f) => f.tag !== '_cardinalhq.name' && f.tag !== '_cardinalhq.fingerprint') ?? [];
@@ -172,12 +184,6 @@ export function QueryEditor({
   }, [query.extractor, onChange, query.chartField, query]);
 
   useEffect(() => {
-    if (aggregation !== query.aggregation) {
-      onChange({ ...query, aggregation });
-    }
-  }, [aggregation, onChange, query]);
-
-  useEffect(() => {
     if (chartAggregation !== query.chartAggregation) {
       onChange({ ...query, chartAggregation });
     }
@@ -226,17 +232,43 @@ export function QueryEditor({
       return;
     }
 
-    const want: Aggregation | undefined =
-      query.metricType === 'count'
-        ? 'sum'
-        : query.metricType === 'gauge' || query.metricType === 'histogram'
-        ? 'max'
-        : undefined;
-
-    if (want) {
-      setAggregation(want);
+    if (query.aggregation != null) {
+      setAggregation(query.aggregation);
+    } else {
+      const def = defaultAggFor(query.metricType);
+      if (def) {
+        setAggregation(def);
+        onChange({ ...query, aggregation: def });
+      }
     }
-  }, [isMetricsMode, query.metricType]);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMetricsMode]);
+
+  useEffect(() => {
+    if (!isMetricsMode) {
+      return;
+    }
+
+    const prev = prevMetricRef.current;
+    const typeChanged = query.metricType !== prev.type;
+    const nameChanged = query.metricName !== prev.name;
+
+    if (typeChanged || nameChanged) {
+      const def = defaultAggFor(query.metricType);
+      if (def) {
+        setAggregation(def);
+        onChange({ ...query, aggregation: def });
+      }
+      prevMetricRef.current = { type: query.metricType, name: query.metricName };
+    }
+  }, [isMetricsMode, query.metricType, query.metricName, onChange, query]);
+
+  useEffect(() => {
+    if (aggregation !== query.aggregation) {
+      onChange({ ...query, aggregation });
+    }
+  }, [aggregation, onChange, query]);
 
   useEffect(() => {
     if (!isMetricsMode) {
@@ -455,7 +487,7 @@ export function QueryEditor({
             metricName={query.metricName}
             metricType={query.metricType}
             aggregation={aggregation}
-            updateAggregation={setAggregation}
+            updateAggregation={handleAggregationChange}
             valueAs={isMetricsMode ? query.valueAs : undefined}
             updateValueAs={isMetricsMode ? (v: any) => onChange({ ...query, valueAs: v }) : undefined}
             setIsWaiting={setIsWaiting}
@@ -629,7 +661,7 @@ export function QueryEditor({
                   metricName={query.metricName}
                   metricType={query.metricType}
                   aggregation={aggregation}
-                  updateAggregation={setAggregation}
+                  updateAggregation={handleAggregationChange}
                   valueAs={query.valueAs}
                   updateValueAs={(v) => onChange({ ...query, valueAs: v })}
                   setIsWaiting={setIsWaiting}
