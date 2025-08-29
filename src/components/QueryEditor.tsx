@@ -145,6 +145,8 @@ export function QueryEditor({
 
     fetchMetricNames({
       datasourceId: datasource.id,
+      startTime: timeRange.startTime,
+      endTime: timeRange.endTime,
       signal: controller.signal,
       setIsWaiting,
     })
@@ -154,7 +156,7 @@ export function QueryEditor({
       })
       .catch(() => {});
     return () => controller.abort();
-  }, [datasource.id, isMetricsMode, setIsWaiting]);
+  }, [datasource.id, isMetricsMode, setIsWaiting, timeRange.startTime, timeRange.endTime]);
 
   useEffect(() => {
     const selections = query.extractor?.selections ?? [];
