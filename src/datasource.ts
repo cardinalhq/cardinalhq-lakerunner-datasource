@@ -1,26 +1,27 @@
 import {
+  CoreApp,
+  DataFrame,
   DataFrameType,
   DataQueryRequest,
   DataQueryResponse,
   DataSourceApi,
   DataSourceInstanceSettings,
+  DataSourceWithSupplementaryQueriesSupport,
   FieldType,
+  MetricFindValue,
+  QueryFixAction,
+  ScopedVars,
   SupplementaryQueryOptions,
   SupplementaryQueryType,
-  DataSourceWithSupplementaryQueriesSupport,
   toDataFrame,
-  DataFrame,
-  ScopedVars,
-  MetricFindValue,
   LegacyMetricFindQueryOptions as VariableQueryOptions,
-  CoreApp,
-  QueryFixAction,
 } from '@grafana/data';
 import { getTemplateSrv } from '@grafana/runtime';
 import { Observable } from 'rxjs';
-import { MyQuery, MyDataSourceOptions, Filter, TEXT_OPERATORS } from './types';
-import { buildNestedFilter } from './util/buildNestedFilter';
-import { toInternalLabel, fetchTagKeys, fetchTagValues } from './services/logs';
+import { runPromQLQuery } from 'services/promql';
+import { buildASTInput } from 'util/astInput';
+import { fetchTagKeys, fetchTagValues, toInternalLabel } from './services/logs';
+import { Filter, MyDataSourceOptions, MyQuery, TEXT_OPERATORS } from './types';
 
 export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
@@ -34,6 +35,7 @@ export class DataSource
       aggregation: 'sum',
     };
   }
+
   modifyQuery(query: MyQuery, action: QueryFixAction): MyQuery {
     const key = action.options?.key;
     const rawVal = action.options?.value;
@@ -96,9 +98,10 @@ export class DataSource
 
     return next;
   }
-  private previousFilters: Record<string, Filter[]> = {};
+
   private fingerprintStore: Record<string, Map<string, string>> = {};
   private prevTopFilter: Record<string, string | undefined> = {};
+
   private clearLogs(refId: string) {
     const key = this.normalizeRefId(refId);
     this.fingerprintStore[key] = new Map();
@@ -134,11 +137,9 @@ export class DataSource
     super(instanceSettings);
     this.instanceSettings = instanceSettings;
   }
-  public isAdvancedEnabled(): boolean {
-    return Boolean(this.instanceSettings.jsonData?.enableAdvancedTab && this.instanceSettings.jsonData.promqlPath);
-  }
-  public getPromqlPath(): string {
-    return String(this.instanceSettings.jsonData?.promqlPath ?? '');
+
+  public isPromQLEnabled(): boolean {
+    return Boolean(this.instanceSettings.jsonData?.enablePromQL && this.instanceSettings.jsonData.promQLPath);
   }
 
   public isTracesEnabled(): boolean {
@@ -189,6 +190,7 @@ export class DataSource
       extractor: q.extractor,
     };
   }
+
   getSupportedSupplementaryQueryTypes(): SupplementaryQueryType[] {
     return [SupplementaryQueryType.LogsVolume, SupplementaryQueryType.LogsSample];
   }
@@ -417,6 +419,10 @@ export class DataSource
     signal: AbortSignal,
     emit?: (frames: DataFrame[]) => void
   ): Promise<DataFrame[]> {
+    if (target.mode === 'promQL') {
+      return runPromQLQuery(this.id, target, range, signal, emit);
+    }
+
     const ds = this.instanceSettings;
     const key = this.normalizeRefId(target.refId);
     const topFilter = target.filters?.[0]
@@ -428,21 +434,29 @@ export class DataSource
     }
     this.prevTopFilter[key] = topFilter;
     const isLogVolumeQuery = target.queryText === 'volume';
-    const isPromql = target.mode === 'promQL';
-    const isMetrics = target.mode === 'metrics' || isPromql;
+    const isMetrics = target.mode === 'metrics';
     const isTrace = target.mode === 'traces';
 
     const rawFilters: Filter[] = target.filters ?? [];
-
     const filters: Filter[] = rawFilters.filter((f) => {
       const isKeyValid = f.tag?.trim();
       const isValueValid = Array.isArray(f.value) && f.value.some((v) => v?.trim?.());
       return isKeyValid && isValueValid;
     });
 
-    // const hasValidExtractor = !!target.extractor?.regex && Array.isArray(target.extractor?.fields);
-    const hasMetricName = !!target.metricName;
-    // const hasFilters = filters.length > 0;
+    const groupBy: string[] = isLogVolumeQuery
+      ? [toInternalLabel('level')]
+      : (target.groupBy ?? []).map(toInternalLabel);
+
+    const chartField = target.chartField;
+    const hasExtractor = !!target.extractor?.regex && Array.isArray(target.extractor.fields);
+    const hasNumericChartField =
+      hasExtractor &&
+      chartField &&
+      target.extractor?.selections?.some((sel) => sel.label === chartField && sel.dataType === 'number');
+
+    const MAX_INITIAL = 1000;
+
     const HIGHLIGHT_OPS = new Set<string>(['contains', ...TEXT_OPERATORS]);
 
     const MESSAGE_KEYS = new Set<string>(['_cardinalhq.message', 'log.message', 'message']);
@@ -475,164 +489,8 @@ export class DataSource
       )
     ).slice(0, 20);
 
-    const hasEqualityScope = filters.some((f) => (f.op === '=' || f.op === 'in') && String(f.tag || '').trim() !== '');
-
-    if (!isMetrics && !hasEqualityScope) {
-      filters.push({
-        tag: 'resource.service.name',
-        op: 'has',
-        value: [''],
-      });
-    }
-
-    if (isMetrics && !hasMetricName) {
-      return [];
-    }
-    this.previousFilters[target.refId] = filters;
-    const groupBy: string[] = isLogVolumeQuery
-      ? [toInternalLabel('level')]
-      : (target.groupBy ?? []).map(toInternalLabel);
-    const MAX_INITIAL = 1000;
-
-    if (isMetrics && target.metricName) {
-      filters.unshift({
-        tag: '_cardinalhq.name',
-        op: '=',
-        value: [target.metricName],
-      });
-    }
-    if (target.selectedFingerprint && target.extractor) {
-      const alreadyHasFp = filters.some((f) => toInternalLabel(f.tag || '') === '_cardinalhq.fingerprint');
-      if (!alreadyHasFp) {
-        filters.unshift({
-          tag: '_cardinalhq.fingerprint',
-          op: '=',
-          value: [String(target.selectedFingerprint)],
-          dataType: 'string',
-          extracted: false,
-          computed: false,
-        });
-      }
-    }
-    let allFilters = [...filters];
-
-    if (target.extractor?.selections?.length) {
-      const selected = target.extractor.selections.filter((sel) => sel.label && sel.userSelected);
-      const byInternal = new Map(selected.map((sel) => [toInternalLabel(sel.label), sel.dataType]));
-
-      const patchedFilters = filters.map((f) => {
-        const k = toInternalLabel(f.tag);
-        const t = byInternal.get(k);
-        return t ? { ...f, dataType: t, extracted: true } : f;
-      });
-
-      const present = new Set(patchedFilters.map((f) => toInternalLabel(f.tag)));
-      const additional: Filter[] = selected
-        .filter((sel) => !present.has(toInternalLabel(sel.label)))
-        .map((sel) => ({
-          tag: sel.label,
-          op: 'has',
-          value: [''],
-          dataType: sel.dataType,
-          extracted: true,
-          computed: false,
-        }));
-
-      allFilters = [...patchedFilters, ...additional];
-    }
-
-    let nestedFilter = buildNestedFilter(allFilters);
-
-    if (!nestedFilter && !isMetrics) {
-      nestedFilter = {
-        k: 'resource.service.name',
-        v: [''],
-        op: 'has',
-        dataType: 'string',
-        extracted: false,
-        computed: false,
-      } as any;
-    }
-
     const from = range?.from.valueOf();
     const to = range?.to.valueOf();
-
-    const dataset = isMetrics ? 'metrics' : isTrace ? 'traces' : 'logs';
-    const expression: any = {
-      dataset,
-      returnResults: true,
-      filter: nestedFilter,
-    };
-    if (target.extractor && Array.isArray(target.extractor.selections) && Array.isArray(target.extractor.fields)) {
-      expression.extract = {
-        regex: target.extractor.regex,
-        fields: target.extractor.selections.map((sel, i) => ({
-          name: target.extractor!.fields[i] || `var_${i + 1}`,
-          type: sel.dataType,
-        })),
-      };
-    }
-
-    if (isMetrics && target.metricType) {
-      expression.metricType = target.metricType;
-    }
-
-    const hasExtractor = !!target.extractor?.regex && Array.isArray(target.extractor.fields);
-    const chartField = target.chartField;
-    const chartAggregation = target.chartAggregation ?? 'sum';
-    const normalAggregation = target.aggregation ?? 'sum';
-
-    const hasNumericChartField =
-      hasExtractor &&
-      chartField &&
-      target.extractor?.selections?.some((sel) => sel.label === chartField && sel.dataType === 'number');
-
-    if (isMetrics) {
-      const metricType = target.metricType;
-      const valueAs = target.valueAs ?? (metricType === 'count' ? 'counts' : 'values');
-      const effAggregation = metricType === 'count' ? 'sum' : normalAggregation;
-      const effRollup = metricType === 'count' ? 'avg' : normalAggregation;
-      const effType = metricType === 'count' ? (valueAs === 'rates_per_second' ? 'rate' : 'count') : 'count';
-
-      expression.chart = {
-        aggregation: effAggregation,
-        rollup: effRollup,
-        groupBys: groupBy,
-        type: effType,
-      };
-    } else if (isTrace) {
-      expression.chart = {
-        aggregation: normalAggregation,
-        rollup: normalAggregation,
-        groupBys: groupBy,
-        type: 'count',
-      };
-    } else if (isLogVolumeQuery) {
-      expression.chart = {
-        aggregation: normalAggregation,
-        rollup: normalAggregation,
-        groupBys: groupBy,
-        type: 'count',
-      };
-    } else if (hasNumericChartField || groupBy.length > 0) {
-      const selected = hasNumericChartField
-        ? target.extractor!.selections.find((sel) => sel.label === chartField && sel.dataType === 'number')
-        : undefined;
-
-      expression.chart = {
-        aggregation: hasNumericChartField ? chartAggregation : normalAggregation,
-        rollup: hasNumericChartField ? chartAggregation : normalAggregation,
-        groupBys: groupBy,
-        type: 'count',
-        ...(hasNumericChartField ? { fieldName: chartField, fieldType: selected?.dataType ?? 'number' } : {}),
-      };
-    }
-
-    const payload = {
-      baseExpressions: {
-        a: expression,
-      },
-    };
 
     const urlParams = new URLSearchParams();
     urlParams.set('s', String(from));
@@ -641,12 +499,14 @@ export class DataSource
       urlParams.set('timeseriesOnly', 'true');
     }
 
+    const astInput = buildASTInput(target);
+
     const response = await fetch(`/api/datasources/${this.id}/resources/proxy-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         path: `/api/v1/graph?${urlParams.toString()}`,
-        body: payload,
+        body: astInput,
       }),
       signal,
     });

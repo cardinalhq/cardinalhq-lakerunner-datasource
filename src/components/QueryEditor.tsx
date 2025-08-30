@@ -52,7 +52,7 @@ export function QueryEditor({
   range,
 }: QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>) {
   const [labelsRefreshKey, setLabelsRefreshKey] = useState(0);
-  const showPromql = datasource.isAdvancedEnabled();
+  const showPromql = datasource.isPromQLEnabled();
   const showTraces = datasource.isTracesEnabled();
   const [isWaiting, setIsWaiting] = useState(false);
   const [selectedExemplar, setSelectedExemplar] = useState<string | null>(query.selectedExemplar ?? null);
@@ -592,7 +592,7 @@ export function QueryEditor({
 
       {isPromqlMode && (
         <div>
-          <div style={{ marginTop: -8, marginBottom: 8 }}>
+          {/* <div style={{ marginTop: -8, marginBottom: 8 }}>
             <TabsBar>
               {(['builder', 'AI-assisted'] as const).map((sub) => (
                 <Tab
@@ -608,7 +608,7 @@ export function QueryEditor({
                 />
               ))}
             </TabsBar>
-          </div>
+          </div> */}
 
           {promqlSubTab === 'builder' ? (
             <>

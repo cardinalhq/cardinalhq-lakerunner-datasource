@@ -95,9 +95,9 @@ export interface DataSourceResponse {
 
 export interface MyDataSourceOptions extends DataSourceJsonData {
   customPath?: string;
-  promqlPath?: string;
-  enableAdvancedTab?: boolean;
   enableTraces?: boolean;
+  enablePromQL?: boolean;
+  promQLPath?: string;
 }
 
 export interface MySecureJsonData {

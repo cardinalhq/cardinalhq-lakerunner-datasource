@@ -9,30 +9,12 @@ export function ConfigEditor(props: Props) {
   const { options, onOptionsChange } = props;
   const { jsonData, secureJsonData = {}, secureJsonFields = {} } = options;
 
-  const onToggleAdvancedTab = (v: boolean) => {
-    onOptionsChange({
-      ...options,
-      jsonData: {
-        ...options.jsonData,
-        enableAdvancedTab: v,
-      },
-    });
-  };
   const onPathChange = (e: ChangeEvent<HTMLInputElement>) => {
     onOptionsChange({
       ...options,
       jsonData: {
         ...jsonData,
         customPath: e.target.value,
-      },
-    });
-  };
-  const onPromqlChange = (e: ChangeEvent<HTMLInputElement>) => {
-    onOptionsChange({
-      ...options,
-      jsonData: {
-        ...jsonData,
-        promqlPath: e.target.value,
       },
     });
   };
@@ -46,7 +28,6 @@ export function ConfigEditor(props: Props) {
       },
     });
   };
-
   const onResetApiKey = () => {
     onOptionsChange({
       ...options,
@@ -67,6 +48,25 @@ export function ConfigEditor(props: Props) {
       jsonData: {
         ...jsonData,
         enableTraces: v,
+      },
+    });
+  };
+
+  const onTogglePromQL = (v: boolean) => {
+    onOptionsChange({
+      ...options,
+      jsonData: {
+        ...options.jsonData,
+        enablePromQL: v,
+      },
+    });
+  };
+  const onPromQLPathChange = (e: ChangeEvent<HTMLInputElement>) => {
+    onOptionsChange({
+      ...options,
+      jsonData: {
+        ...jsonData,
+        promQLPath: e.target.value,
       },
     });
   };
@@ -106,16 +106,16 @@ export function ConfigEditor(props: Props) {
       <div style={{ marginTop: 8 }}>
         <InlineField label="Experimental PromQL support">
           <InlineSwitch
-            value={options.jsonData.enableAdvancedTab || false}
-            onChange={(e) => onToggleAdvancedTab(e.currentTarget.checked)}
+            value={options.jsonData.enablePromQL || false}
+            onChange={(e) => onTogglePromQL(e.currentTarget.checked)}
           />
         </InlineField>
-        {options.jsonData.enableAdvancedTab && (
+        {options.jsonData.enablePromQL && (
           <InlineField label="PromQL API Root">
             <Input
               id="config-editor-path-promql"
-              value={jsonData.promqlPath || ''}
-              onChange={onPromqlChange}
+              value={jsonData.promQLPath || ''}
+              onChange={onPromQLPathChange}
               placeholder="e.g. https://your-api.com"
               width={40}
             />
