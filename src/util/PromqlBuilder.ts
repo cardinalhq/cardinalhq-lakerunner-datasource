@@ -23,8 +23,9 @@ function rawMetricName(name: string): string {
   return (name || '').trim();
 }
 
-function rawLabelKey(key: string): string {
-  return (key || '').trim();
+function normalizedLabel(labelName: string): string {
+  const trimmed = (labelName || '').trim();
+  return trimmed.includes('.') ? `"${trimmed}"` : trimmed;
 }
 
 function quote(v: string): string {
@@ -32,7 +33,7 @@ function quote(v: string): string {
 }
 
 function renderClause(k: string, op: FilterOp, v: string | string[] | undefined): string {
-  const key = rawLabelKey(k);
+  const key = normalizedLabel(k);
 
   switch (op) {
     case 'eq':
@@ -108,7 +109,8 @@ function renderGroupBy(groupBys?: string[]): string {
   if (!Array.isArray(groupBys) || !groupBys.length) {
     return '';
   }
-  return ` by (${groupBys.join(',')})`;
+  const quotedGroupBys = groupBys.map((gb) => normalizedLabel(gb));
+  return ` by (${quotedGroupBys.join(',')})`;
 }
 
 export function promqlFromGraphPayload(

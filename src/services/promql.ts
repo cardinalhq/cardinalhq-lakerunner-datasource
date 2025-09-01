@@ -88,27 +88,29 @@ export async function runPromQLQuery(
         if (parsed.type !== 'result') {
           continue;
         }
-        const point = parsed.data?.default;
-        if (!point) {
+        const numSeries = Object.keys(parsed.data || {}).length;
+        if (numSeries < 1) {
           continue;
         }
 
-        const ts = point.timestamp;
-        const val = point.value?.num ?? 0;
-        const tags = point.tags ?? {};
+        for (const [seriesLabel, point] of Object.entries(parsed.data || {})) {
+          const ts = (point as any).timestamp;
+          const val = (point as any).value?.num ?? 0;
 
-        const labelParts: string[] = [];
-        Object.entries(tags).forEach(([key, value]) => {
-          labelParts.push(`${key}=${value}`);
-        });
-        const label = labelParts.length ? labelParts.join(', ') : (target.metricName as string);
+          // If the SSE stream returns "default" as the series label, we should use
+          // the metric name so that it shows that in the chart legend.
+          let label = seriesLabel;
+          if (label === 'default') {
+            label = target.metricName as string;
+          }
 
-        if (!frameData[label]) {
-          frameData[label] = { timestamps: [], values: [] };
+          if (!frameData[label]) {
+            frameData[label] = { timestamps: [], values: [] };
+          }
+
+          frameData[label].timestamps.push(ts);
+          frameData[label].values.push(val);
         }
-
-        frameData[label].timestamps.push(ts);
-        frameData[label].values.push(val);
 
         emitCount++;
 
