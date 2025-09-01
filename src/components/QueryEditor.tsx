@@ -69,9 +69,23 @@ export function QueryEditor({
   const [metricOptions, setMetricOptions] = useState<Array<{ metricName: string; metricType: MetricKind }>>([]);
   const lastMetricsKeyRef = useRef<string>('');
   const { bodies, fingerprints } = useLogFingerprints(datasource, query.refId);
-
+  const [promqlEverEdited, setPromqlEverEdited] = useState(false);
   const defaultAggFor = (mt?: UiMetricType): Aggregation | undefined =>
     mt === 'count' ? 'sum' : mt === 'gauge' || mt === 'histogram' ? 'max' : undefined;
+
+  const defaultValueAsFor = (mt?: UiMetricType): ValueAs => (mt === 'count' ? 'rates_per_second' : 'values');
+  const resetToBuilder = React.useCallback(() => {
+    setPromqlDirty(false);
+
+    const base = (prevBuilderRef.current ?? '').trim();
+
+    setPromqlDraft(base);
+
+    if ((query.promqlOutput ?? '') !== base) {
+      onChange({ ...query, promqlOutput: base });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onChange, query.promqlOutput]);
 
   const prevMetricRef = useRef<{ type?: UiMetricType; name?: string }>({
     type: query.metricType,
@@ -79,6 +93,7 @@ export function QueryEditor({
   });
 
   const handleAggregationChange = (next: Aggregation) => {
+    resetToBuilder();
     setAggregation(next);
   };
 
@@ -276,13 +291,13 @@ export function QueryEditor({
     }
 
     if (!query.valueAs) {
-      onChange({ ...query, valueAs: query.metricType === 'count' ? 'counts' : 'values' });
+      onChange({ ...query, valueAs: defaultValueAsFor(query.metricType) });
       return;
     }
 
     if (query.metricType === 'count') {
       if (!(query.valueAs === 'counts' || query.valueAs === 'rates_per_second')) {
-        onChange({ ...query, valueAs: 'counts' });
+        onChange({ ...query, valueAs: defaultValueAsFor('count') });
       }
     } else {
       if (query.valueAs !== 'values') {
@@ -310,7 +325,10 @@ export function QueryEditor({
       return '';
     }
 
-    const valueAs: ValueAs = (query.valueAs ?? (query.metricType === 'count' ? 'counts' : 'values')) as ValueAs;
+    const valueAs: ValueAs = (query.valueAs ?? defaultValueAsFor(query.metricType)) as ValueAs;
+
+    const effMetricType =
+      query.metricType === 'count' && valueAs === 'rates_per_second' ? ('counter' as any) : query.metricType;
 
     const effAggregation: Aggregation = query.metricType === 'count' ? 'sum' : query.aggregation ?? 'max';
 
@@ -322,7 +340,7 @@ export function QueryEditor({
       dataset: 'metrics',
       returnResults: true,
       filter: nested,
-      metricType: query.metricType,
+      metricType: effMetricType,
       chart: {
         aggregation: effAggregation,
         rollup: effRollup,
@@ -345,20 +363,40 @@ export function QueryEditor({
   ]);
 
   useEffect(() => {
-    const next = promqlPreview || '';
-    const prev = prevBuilderRef.current;
-
-    if (next !== prev) {
-      if (!isPromqlMode || promqlSubTab === 'builder') {
-        setPromqlDraft(next);
-        setPromqlDirty(false);
-      } else if (promqlDirty) {
-      } else {
-        setPromqlDraft(next);
-      }
-      prevBuilderRef.current = next;
+    if (!(isPromqlMode && promqlSubTab === 'builder')) {
+      return;
     }
-  }, [promqlPreview, promqlDirty, isPromqlMode, promqlSubTab]);
+    const saved = (query.promqlOutput ?? '').trim();
+    if (saved && promqlDraft !== saved) {
+      setPromqlDraft(saved);
+      if (!promqlDirty) {
+        setPromqlDirty(true);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPromqlMode, promqlSubTab]);
+
+  useEffect(() => {
+    if (!(isPromqlMode && promqlSubTab === 'builder')) {
+      return;
+    }
+
+    const preview = (promqlPreview ?? '').trim();
+    const savedOut = (query.promqlOutput ?? '').trim();
+    const userHasCustom = promqlDirty || (!!savedOut && savedOut !== (prevBuilderRef.current ?? ''));
+
+    if (!userHasCustom && preview) {
+      if (promqlDraft !== preview) {
+        setPromqlDraft(preview);
+      }
+      if (savedOut !== preview) {
+        onChange({ ...query, promqlOutput: preview });
+      }
+    }
+
+    prevBuilderRef.current = preview;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPromqlMode, promqlSubTab, promqlPreview, promqlDirty, promqlDraft, query, onChange]);
 
   const filtersByModeRef = useRef<Record<Mode, Filter[]>>({
     logs: [],
@@ -446,10 +484,15 @@ export function QueryEditor({
               onChange={(opt) => {
                 const val = opt?.value ?? '';
                 const found = metricOptions.find((m) => m.metricName === val);
+                const nextMetricType = toUiMetricType(found?.metricType);
+
+                setPromqlDirty(false);
+                resetToBuilder();
                 onChange({
                   ...query,
                   metricName: val || undefined,
-                  metricType: toUiMetricType(found?.metricType),
+                  metricType: nextMetricType,
+                  valueAs: defaultValueAsFor(nextMetricType),
                 });
               }}
               width={40}
@@ -621,10 +664,15 @@ export function QueryEditor({
                     onChange={(opt) => {
                       const val = opt?.value ?? '';
                       const found = metricOptions.find((m) => m.metricName === val);
+                      const nextMetricType = toUiMetricType(found?.metricType);
+
+                      setPromqlDirty(false);
+                      resetToBuilder();
                       onChange({
                         ...query,
                         metricName: val || undefined,
-                        metricType: toUiMetricType(found?.metricType),
+                        metricType: nextMetricType,
+                        valueAs: defaultValueAsFor(nextMetricType),
                       });
                     }}
                     width={40}
@@ -642,19 +690,25 @@ export function QueryEditor({
                   startTime={timeRange.startTime}
                   endTime={timeRange.endTime}
                   updateFilter={(i, patch) => {
+                    resetToBuilder();
                     const updated = [...filters];
                     updated[i] = { ...updated[i], ...patch };
                     onChange({ ...query, filters: updated });
                   }}
                   removeFilter={(i) => {
+                    resetToBuilder();
                     const updated = [...filters];
                     updated.splice(i, 1);
                     onChange({ ...query, filters: updated });
                   }}
-                  addFilter={() =>
-                    onChange({ ...query, filters: [...filters, { tag: '', op: '=' as Operator, value: [''] }] })
-                  }
-                  updateGroupBy={(labels) => onChange({ ...query, groupBy: labels })}
+                  addFilter={() => {
+                    resetToBuilder();
+                    onChange({ ...query, filters: [...filters, { tag: '', op: '=' as Operator, value: [''] }] });
+                  }}
+                  updateGroupBy={(labels) => {
+                    resetToBuilder();
+                    onChange({ ...query, groupBy: labels });
+                  }}
                   groupBy={query.groupBy ?? []}
                   onRunQuery={onRunQuery}
                   mode={'metrics'}
@@ -663,7 +717,11 @@ export function QueryEditor({
                   aggregation={aggregation}
                   updateAggregation={handleAggregationChange}
                   valueAs={query.valueAs}
-                  updateValueAs={(v) => onChange({ ...query, valueAs: v })}
+                  updateValueAs={(v) => {
+                    setPromqlDirty(false);
+                    resetToBuilder();
+                    onChange({ ...query, valueAs: v });
+                  }}
                   setIsWaiting={setIsWaiting}
                 />
               ))}
@@ -673,24 +731,41 @@ export function QueryEditor({
                   <PrismPromQLEditor
                     value={promqlDraft}
                     language="promql"
-                    height={30}
+                    height={40}
                     width="100%"
                     wordWrap
                     onChange={(val: any) => {
+                      const next = (val ?? '').trimEnd();
                       if (!promqlDirty) {
                         setPromqlDirty(true);
                       }
-                      setPromqlDraft(val ?? '');
+                      if (!promqlEverEdited) {
+                        setPromqlEverEdited(true);
+                      }
+                      setPromqlDraft(next);
+                      if ((query.promqlOutput ?? '') !== next) {
+                        onChange({ ...query, promqlOutput: next });
+                      }
                     }}
-                    onBlur={() => onChange({ ...query, promqlOutput: promqlDraft })}
+                    onBlur={() => {
+                      if ((query.promqlOutput ?? '') !== promqlDraft) {
+                        onChange({ ...query, promqlOutput: promqlDraft });
+                      }
+                    }}
                   />
+
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex', marginTop: 6 }}>
-                    {promqlDirty && (
+                    {(promqlDirty || promqlEverEdited) && (
                       <LinkButton
                         variant="secondary"
+                        disabled={!promqlDirty}
                         onClick={() => {
+                          const next = (promqlPreview ?? '').trim();
                           setPromqlDirty(false);
-                          setPromqlDraft(promqlPreview || '');
+                          setPromqlDraft(next);
+                          if ((query.promqlOutput ?? '') !== next) {
+                            onChange({ ...query, promqlOutput: next });
+                          }
                         }}
                       >
                         Reset to builder output
