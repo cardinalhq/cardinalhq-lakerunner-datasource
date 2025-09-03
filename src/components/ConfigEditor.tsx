@@ -71,6 +71,16 @@ export function ConfigEditor(props: Props) {
     });
   };
 
+  const onToggleLogQL = (v: boolean) => {
+    onOptionsChange({
+      ...options,
+      jsonData: {
+        ...options.jsonData,
+        enableLogQL: v,
+      },
+    });
+  };
+
   return (
     <>
       <InlineField label="Query API Root">
@@ -102,7 +112,14 @@ export function ConfigEditor(props: Props) {
           />
         </InlineField>
       </div>
-
+      <div style={{ marginTop: 8 }}>
+        <InlineField label="Experimental LogQL support">
+          <InlineSwitch
+            value={options.jsonData.enableLogQL || false}
+            onChange={(e) => onToggleLogQL(e.currentTarget.checked)}
+          />
+        </InlineField>
+      </div>
       <div style={{ marginTop: 8 }}>
         <InlineField label="Experimental PromQL support">
           <InlineSwitch

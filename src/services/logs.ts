@@ -119,7 +119,7 @@ export async function fetchTagKeys({
   extract,
 }: {
   datasourceId: number;
-  mode?: 'logs' | 'metrics' | 'promQL' | 'traces';
+  mode?: 'logs' | 'metrics' | 'promQL' | 'logQL' | 'traces';
   useRelativeTime?: boolean;
   startTime?: number;
   endTime?: number;
@@ -241,7 +241,7 @@ export async function fetchTagValues({
   extract,
 }: {
   datasourceId: number;
-  mode?: 'logs' | 'metrics' | 'promQL' | 'traces';
+  mode?: 'logs' | 'metrics' | 'promQL' | 'logQL' | 'traces';
   metricName?: string;
   metricType?: string;
   labelName: string;

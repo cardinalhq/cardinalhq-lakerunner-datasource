@@ -52,7 +52,7 @@ export interface MyQuery extends DataQuery {
   groupBy?: string[];
   queryText?: string;
   constant?: number;
-  mode?: 'logs' | 'metrics' | 'promQL' | 'traces';
+  mode?: 'logs' | 'metrics' | 'promQL' | 'logQL' | 'traces';
   metricName?: string;
   metricType?: 'gauge' | 'count' | 'histogram';
   timeFrom?: number;
@@ -62,6 +62,7 @@ export interface MyQuery extends DataQuery {
   promqlModel?: string;
   promqlDescription?: string;
   promqlOutput?: string;
+  logqlOutput?: string;
   selectedExemplar?: string | null;
   selectedFingerprint?: string;
   chartField?: string;
@@ -97,6 +98,7 @@ export interface MyDataSourceOptions extends DataSourceJsonData {
   customPath?: string;
   enableTraces?: boolean;
   enablePromQL?: boolean;
+  enableLogQL?: boolean;
   promQLPath?: string;
 }
 

@@ -26,7 +26,7 @@ import { PrismPromQLEditor } from './PrismEditor';
 
 type MetricKind = 'gauge' | 'sum' | 'histogram' | 'counter' | 'summary';
 type UiMetricType = MyQuery['metricType'];
-type Mode = 'logs' | 'metrics' | 'promQL' | 'traces';
+type Mode = 'logs' | 'metrics' | 'promQL' | 'logQL' | 'traces';
 
 const toUiMetricType = (k?: MetricKind): UiMetricType => {
   switch (k) {
@@ -54,6 +54,7 @@ export function QueryEditor({
   const [labelsRefreshKey, setLabelsRefreshKey] = useState(0);
   const showPromql = datasource.isPromQLEnabled();
   const showTraces = datasource.isTracesEnabled();
+  const showLogql = datasource.isLogQLEnabled();
   const [isWaiting, setIsWaiting] = useState(false);
   const [selectedExemplar, setSelectedExemplar] = useState<string | null>(query.selectedExemplar ?? null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -74,7 +75,8 @@ export function QueryEditor({
     mt === 'count' ? 'sum' : mt === 'gauge' || mt === 'histogram' ? 'max' : undefined;
 
   const defaultValueAsFor = (mt?: UiMetricType): ValueAs => (mt === 'count' ? 'rates_per_second' : 'values');
-
+  const isLogqlMode = (query.mode ?? 'logs') === 'logQL';
+  const [logqlDraft, setLogqlDraft] = useState<string>(query.logqlOutput ?? '');
   const prevMetricRef = useRef<{ type?: UiMetricType; name?: string }>({
     type: query.metricType,
     name: query.metricName,
@@ -392,6 +394,7 @@ export function QueryEditor({
     logs: [],
     metrics: [],
     promQL: [],
+    logQL: [],
     traces: [],
   });
 
@@ -408,8 +411,18 @@ export function QueryEditor({
     if (showTraces) {
       tabs.push('traces');
     }
+    if (showLogql) {
+      tabs.push('logQL');
+    }
     return tabs;
-  }, [showPromql, showTraces]);
+  }, [showPromql, showLogql, showTraces]);
+
+  useEffect(() => {
+    if (!isLogqlMode) {
+      return;
+    }
+    setLogqlDraft(query.logqlOutput ?? '');
+  }, [isLogqlMode, query.logqlOutput]);
 
   return (
     <div style={{ position: 'relative' }}>
@@ -444,13 +457,16 @@ export function QueryEditor({
                 if (mode === 'promQL' && !showPromql) {
                   return;
                 }
-
+                if (mode === 'logQL' && !showLogql) {
+                  return;
+                }
                 const targetMode = mode;
-                const wantDefaultFilter = targetMode !== 'promQL' || promqlSubTab === 'builder';
+                const wantDefaultFilter = !(targetMode === 'promQL' || targetMode === 'logQL'); // CHANGED
+
                 onChange({
                   ...query,
                   mode: targetMode,
-                  filters: wantDefaultFilter ? [{ tag: '', op: '=' as Operator, value: [''] }] : [],
+                  filters: wantDefaultFilter ? [{ tag: '', op: '=' as Operator, value: [''] }] : [], // CHANGED
                   groupBy: [],
                   chartField: undefined,
                   extractor: undefined,
@@ -490,6 +506,7 @@ export function QueryEditor({
         </InlineFieldRow>
       )}
       {!isPromqlMode &&
+        !isLogqlMode &&
         filters.map((filter, index) => (
           <FilterRow
             key={index}
@@ -529,7 +546,7 @@ export function QueryEditor({
           />
         ))}
 
-      {!isMetricsMode && !isPromqlMode && !isTracesMode && (
+      {!isMetricsMode && !isPromqlMode && !isTracesMode && !isLogqlMode && (
         <Collapse
           label={
             <div className={css({ display: 'flex', alignItems: 'center', gap: 8 })}>
@@ -773,6 +790,30 @@ export function QueryEditor({
           )}
         </div>
       )}
+      {isLogqlMode && (
+        <div style={{ marginTop: 8 }}>
+          <PrismPromQLEditor
+            value={logqlDraft}
+            language="logql"
+            height={40}
+            width="100%"
+            wordWrap
+            onChange={(val: string) => {
+              const next = (val ?? '').trimEnd();
+              setLogqlDraft(next);
+              if ((query.logqlOutput ?? '') !== next) {
+                onChange({ ...query, logqlOutput: next });
+              }
+            }}
+            onBlur={() => {
+              if ((query.logqlOutput ?? '') !== logqlDraft) {
+                onChange({ ...query, logqlOutput: logqlDraft });
+              }
+            }}
+          />
+        </div>
+      )}
+
       <SelectedLogModal
         logLine={selectedExemplar ?? ''}
         isOpen={isModalOpen}

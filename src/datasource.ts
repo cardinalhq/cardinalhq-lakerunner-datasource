@@ -22,6 +22,7 @@ import { runPromQLQuery } from 'services/promql';
 import { buildASTInput } from 'util/astInput';
 import { fetchTagKeys, fetchTagValues, toInternalLabel } from './services/logs';
 import { Filter, MyDataSourceOptions, MyQuery, TEXT_OPERATORS } from './types';
+import { runLogQLQuery } from 'services/logql';
 
 export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
@@ -140,6 +141,9 @@ export class DataSource
 
   public isPromQLEnabled(): boolean {
     return Boolean(this.instanceSettings.jsonData?.enablePromQL && this.instanceSettings.jsonData.promQLPath);
+  }
+  public isLogQLEnabled(): boolean {
+    return Boolean(this.instanceSettings.jsonData?.enableLogQL && this.instanceSettings.jsonData.promQLPath);
   }
 
   public isTracesEnabled(): boolean {
@@ -422,7 +426,9 @@ export class DataSource
     if (target.mode === 'promQL') {
       return runPromQLQuery(this.id, target, range, signal, emit);
     }
-
+    if (target.mode === 'logQL') {
+      return runLogQLQuery(this.id, target, range, signal, emit);
+    }
     const ds = this.instanceSettings;
     const key = this.normalizeRefId(target.refId);
     const topFilter = target.filters?.[0]

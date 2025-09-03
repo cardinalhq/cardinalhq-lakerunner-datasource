@@ -28,7 +28,7 @@ interface FilterRowProps {
   updateGroupBy: (labels: string[]) => void;
   groupBy: string[];
   onRunQuery: () => void;
-  mode?: 'logs' | 'metrics' | 'promQL' | 'traces';
+  mode?: 'logs' | 'metrics' | 'promQL' | 'logQL' | 'traces';
   metricName?: string;
   metricType?: string;
   aggregation?: string;
