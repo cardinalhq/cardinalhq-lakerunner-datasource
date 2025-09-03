@@ -74,18 +74,6 @@ export function QueryEditor({
     mt === 'count' ? 'sum' : mt === 'gauge' || mt === 'histogram' ? 'max' : undefined;
 
   const defaultValueAsFor = (mt?: UiMetricType): ValueAs => (mt === 'count' ? 'rates_per_second' : 'values');
-  const resetToBuilder = React.useCallback(() => {
-    setPromqlDirty(false);
-
-    const base = (prevBuilderRef.current ?? '').trim();
-
-    setPromqlDraft(base);
-
-    if ((query.promqlOutput ?? '') !== base) {
-      onChange({ ...query, promqlOutput: base });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onChange, query.promqlOutput]);
 
   const prevMetricRef = useRef<{ type?: UiMetricType; name?: string }>({
     type: query.metricType,
@@ -93,7 +81,6 @@ export function QueryEditor({
   });
 
   const handleAggregationChange = (next: Aggregation) => {
-    resetToBuilder();
     setAggregation(next);
   };
 
@@ -256,7 +243,6 @@ export function QueryEditor({
         onChange({ ...query, aggregation: def });
       }
     }
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMetricsMode]);
 
@@ -366,15 +352,20 @@ export function QueryEditor({
     if (!(isPromqlMode && promqlSubTab === 'builder')) {
       return;
     }
+
     const saved = (query.promqlOutput ?? '').trim();
-    if (saved && promqlDraft !== saved) {
-      setPromqlDraft(saved);
-      if (!promqlDirty) {
-        setPromqlDirty(true);
-      }
+    if (!saved) {
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPromqlMode, promqlSubTab]);
+
+    setPromqlDraft((prevDraft) => {
+      if (prevDraft === saved) {
+        return prevDraft;
+      }
+      setPromqlDirty((prevDirty) => (prevDirty ? prevDirty : true));
+      return saved;
+    });
+  }, [isPromqlMode, promqlSubTab, query.promqlOutput]);
 
   useEffect(() => {
     if (!(isPromqlMode && promqlSubTab === 'builder')) {
@@ -395,7 +386,6 @@ export function QueryEditor({
     }
 
     prevBuilderRef.current = preview;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPromqlMode, promqlSubTab, promqlPreview, promqlDirty, promqlDraft, query, onChange]);
 
   const filtersByModeRef = useRef<Record<Mode, Filter[]>>({
@@ -486,8 +476,7 @@ export function QueryEditor({
                 const found = metricOptions.find((m) => m.metricName === val);
                 const nextMetricType = toUiMetricType(found?.metricType);
 
-                setPromqlDirty(false);
-                resetToBuilder();
+                setPromqlDirty(true);
                 onChange({
                   ...query,
                   metricName: val || undefined,
@@ -665,14 +654,13 @@ export function QueryEditor({
                       const val = opt?.value ?? '';
                       const found = metricOptions.find((m) => m.metricName === val);
                       const nextMetricType = toUiMetricType(found?.metricType);
-
                       setPromqlDirty(false);
-                      resetToBuilder();
                       onChange({
                         ...query,
                         metricName: val || undefined,
                         metricType: nextMetricType,
                         valueAs: defaultValueAsFor(nextMetricType),
+                        promqlOutput: undefined,
                       });
                     }}
                     width={40}
@@ -690,23 +678,19 @@ export function QueryEditor({
                   startTime={timeRange.startTime}
                   endTime={timeRange.endTime}
                   updateFilter={(i, patch) => {
-                    resetToBuilder();
                     const updated = [...filters];
                     updated[i] = { ...updated[i], ...patch };
                     onChange({ ...query, filters: updated });
                   }}
                   removeFilter={(i) => {
-                    resetToBuilder();
                     const updated = [...filters];
                     updated.splice(i, 1);
                     onChange({ ...query, filters: updated });
                   }}
                   addFilter={() => {
-                    resetToBuilder();
                     onChange({ ...query, filters: [...filters, { tag: '', op: '=' as Operator, value: [''] }] });
                   }}
                   updateGroupBy={(labels) => {
-                    resetToBuilder();
                     onChange({ ...query, groupBy: labels });
                   }}
                   groupBy={query.groupBy ?? []}
@@ -718,8 +702,6 @@ export function QueryEditor({
                   updateAggregation={handleAggregationChange}
                   valueAs={query.valueAs}
                   updateValueAs={(v) => {
-                    setPromqlDirty(false);
-                    resetToBuilder();
                     onChange({ ...query, valueAs: v });
                   }}
                   setIsWaiting={setIsWaiting}

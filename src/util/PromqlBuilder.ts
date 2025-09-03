@@ -23,6 +23,10 @@ function rawMetricName(name: string): string {
   return (name || '').trim();
 }
 
+function isValidPromMetricName(name: string): boolean {
+  return /^[a-zA-Z_:][a-zA-Z0-9_:]*$/.test(name);
+}
+
 function normalizedLabel(labelName: string): string {
   const trimmed = (labelName || '').trim();
   return trimmed.includes('.') ? `"${trimmed}"` : trimmed;
@@ -32,30 +36,71 @@ function quote(v: string): string {
   return `"${String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function toRegexAlternation(values: string[], wrap: 'exact' | 'contains'): string {
+  const parts = values.map(escapeRegexLiteral);
+  if (wrap === 'exact') {
+    return `^(?:${parts.join('|')})$`;
+  }
+  return `.*(?:${parts.join('|')}).*`;
+}
+
 function renderClause(k: string, op: FilterOp, v: string | string[] | undefined): string {
   const key = normalizedLabel(k);
 
+  const ensureString = (val: string | string[] | undefined): string => {
+    if (Array.isArray(val)) {
+      return val.join(',');
+    }
+    return String(val ?? '');
+  };
+
   switch (op) {
     case 'eq':
-      return `${key}=${quote(String(v))}`;
+      return `${key}=${quote(ensureString(v))}`;
     case 'neq':
-      return `${key}!=${quote(String(v))}`;
-    case 'regex':
-    case 'contains':
-    case 'in': {
-      const rx = String(v ?? '');
+      return `${key}!=${quote(ensureString(v))}`;
+
+    case 'regex': {
+      const rx = ensureString(v);
       const quoted = rx.startsWith('"') && rx.endsWith('"') ? rx : quote(rx);
       return `${key}=~${quoted}`;
     }
-    case 'not_regex':
-    case 'not_contains':
-    case 'not_in': {
-      const rx = String(v ?? '');
+    case 'not_regex': {
+      const rx = ensureString(v);
       const quoted = rx.startsWith('"') && rx.endsWith('"') ? rx : quote(rx);
       return `${key}!~${quoted}`;
     }
+
+    // Treat "in" as exact-match alternation
+    case 'in': {
+      const vals = Array.isArray(v) ? v : [ensureString(v)];
+      const rx = toRegexAlternation(vals, 'exact');
+      return `${key}=~${quote(rx)}`;
+    }
+    case 'not_in': {
+      const vals = Array.isArray(v) ? v : [ensureString(v)];
+      const rx = toRegexAlternation(vals, 'exact');
+      return `${key}!~${quote(rx)}`;
+    }
+
+    // Treat "contains" as substring alternation
+    case 'contains': {
+      const vals = Array.isArray(v) ? v : [ensureString(v)];
+      const rx = toRegexAlternation(vals, 'contains');
+      return `${key}=~${quote(rx)}`;
+    }
+    case 'not_contains': {
+      const vals = Array.isArray(v) ? v : [ensureString(v)];
+      const rx = toRegexAlternation(vals, 'contains');
+      return `${key}!~${quote(rx)}`;
+    }
+
     default:
-      return `${key}=${quote(String(v))}`;
+      return `${key}=${quote(ensureString(v))}`;
   }
 }
 
@@ -79,7 +124,7 @@ function extractMetricAndLabels(filterBlock: any): {
       if (node.k === '_cardinalhq.name' && node.op === 'eq' && Array.isArray(node.v) && node.v[0]) {
         metricName = rawMetricName(node.v[0]);
       } else {
-        selectors.push(renderClause(node.k, node.op, node.v ?? ''));
+        selectors.push(renderClause(node.k, node.op as FilterOp, node.v ?? ''));
       }
       return;
     }
@@ -133,8 +178,12 @@ export function promqlFromGraphPayload(
     return null;
   }
 
-  const labels = selectors.length ? `{${selectors.join(',')}}` : '';
-  const inner = `${metricName}${labels}`;
+  const useNameMatcher = !isValidPromMetricName(metricName);
+  const selectorsWithName = useNameMatcher ? [`__name__=${quote(metricName)}`, ...selectors] : selectors;
+
+  const labelBlock = selectorsWithName.length ? `{${selectorsWithName.join(',')}}` : '';
+
+  const inner = useNameMatcher ? `${labelBlock}` : `${metricName}${labelBlock}`;
 
   const series = (metricType || '').toLowerCase() === 'counter' ? `rate(${inner}[${rateWindow}])` : inner;
 
