@@ -1,6 +1,8 @@
 import { DataFrame, DataQueryRequest, FieldType, toDataFrame } from '@grafana/data';
 import { MyQuery } from 'types';
 
+type SeriesBuf = { timestamps: number[]; values: number[] };
+
 export async function runPromQLQuery(
   dataSourceId: number,
   target: MyQuery,
@@ -38,7 +40,7 @@ export async function runPromQLQuery(
   };
 
   let buffer = '';
-  const frameData: Record<string, { timestamps: number[]; values: number[] }> = {};
+  const frameData: Record<string, SeriesBuf> = {};
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -68,6 +70,17 @@ export async function runPromQLQuery(
     }
   };
 
+  const toNumberValue = (v: any): number => {
+    if (typeof v === 'number') {
+      return v;
+    }
+    if (v && typeof v === 'object' && typeof v.num === 'number') {
+      return v.num;
+    }
+    const n = Number(v?.num ?? v);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
   while (true) {
     const { value, done } = await reader.read();
     if (done) {
@@ -85,24 +98,20 @@ export async function runPromQLQuery(
       }
       try {
         const parsed = JSON.parse(line.slice(5).trim());
-        if (parsed.type !== 'result') {
-          continue;
-        }
-        const numSeries = Object.keys(parsed.data || {}).length;
-        if (numSeries < 1) {
+        if (parsed?.type !== 'result') {
           continue;
         }
 
-        for (const [seriesLabel, point] of Object.entries(parsed.data || {})) {
-          const ts = (point as any).timestamp;
-          const val = (point as any).value?.num ?? 0;
+        const d = parsed.data;
 
-          // If the SSE stream returns "default" as the series label, we should use
-          // the metric name so that it shows that in the chart legend.
-          let label = seriesLabel;
-          if (label === 'default') {
-            label = target.metricName as string;
+        if (d && typeof d === 'object' && 'timestamp' in d && 'label' in d) {
+          const ts = Number(d.timestamp);
+          const val = toNumberValue(d.value);
+          if (!Number.isFinite(ts) || !Number.isFinite(val)) {
+            continue;
           }
+
+          const label = String(d.label);
 
           if (!frameData[label]) {
             frameData[label] = { timestamps: [], values: [] };
