@@ -1,5 +1,5 @@
 #rg_mainContainer {
-    padding: 0 !important;
+  padding: 0 !important;
 }
 
 .rg_header,
@@ -10,79 +10,75 @@
 #rg_regex_result_container,
 #rg_display_programming_languages,
 #rg_share,
-footer
-{
-    display: none !important;
+footer {
+  display: none !important;
 }
 
 #rg_pattern_selection_container > .d-none {
-    display: none !important;
+  display: none !important;
 }
 
 .rg-caption-holder,
-#rg_button_copy
-{
-    display: none !important;
+#rg_button_copy {
+  display: none !important;
 }
 
 #rg_pattern_selection_container {
-    background: transparent !important;
-    margin: 0 !important;
-    margin-bottom: 8px !important;
+  background: transparent !important;
+  margin: 0 !important;
+  margin-bottom: 8px !important;
 }
 
 #rg_pattern_selection_container > div {
-    width: 100% !important;
-    padding: 0 !important;
+  width: 100% !important;
+  padding: 0 !important;
 }
 
 #rg_pattern_selection_container .text-muted {
-    display: none !important;
+  display: none !important;
 }
 
 #rg_result_container,
 #rg_result_display_box {
-    background: #17141d !important;
-    border: 1px dashed rgb(65, 65, 65) !important;
-    color: #fff;
+  background: #17141d !important;
+  border: 1px dashed rgb(65, 65, 65) !important;
+  color: #fff;
 }
 
 #rg_text_display {
-    margin-bottom: 8px;
+  margin-bottom: 8px;
 }
 
-.rg-code, .rg-match-container, .rg-regex-container {
-    font-family: "Roboto Mono";
-    font-size: 13px;
+.rg-code,
+.rg-match-container,
+.rg-regex-container {
+  font-family: 'Roboto Mono';
+  font-size: 13px;
 }
 
 .bg-primary {
-
 }
 .bg-success {
-
 }
 .bg-danger {
-
 }
 .bg-warning {
-
 }
 
 .bg-dark {
-    background-color: #17141d !important;
+  background-color: #17141d !important;
 }
 
 .rg-char-selected {
-    background: #ffd666 !important;
-    color: #000 !important;
+  background: #ffd666 !important;
+  color: #000 !important;
 }
 
 .rg-item-selected {
-    background: #ffd666 !important;
-    border-width: 0 !important;
+  background: #ffd666 !important;
+  border-width: 0 !important;
 }
 
 .rg-item-not-available {
-    background-color: #343333 !important;
+  background-color: #343333 !important;
 }

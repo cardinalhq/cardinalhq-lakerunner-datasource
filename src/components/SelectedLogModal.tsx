@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Modal, Button, Input, Stack, useTheme } from '@grafana/ui';
 import { config } from '@grafana/runtime';
-import { buildNestedFilter } from '../util/buildNestedFilter';
 
 interface LogLineExtractionMatch {
   index: number;
@@ -24,6 +23,7 @@ interface SelectedLogModalProps {
   onExtractionApply?: (
     extractor: {
       regex: string;
+      logqlRegex?: string;
       fields: string[];
       selections: LogLineExtractionMatch[];
     },
@@ -33,6 +33,30 @@ interface SelectedLogModalProps {
 
 function getDataTypeOfRecognizer(name: string): 'string' | 'number' {
   return ['Number', 'Digit', 'Decimal number'].includes(name) ? 'number' : 'string';
+}
+function generateLogQLNamedCaptureRegex(baseRegex: string, extractions: LogLineExtractionMatch[]): string {
+  if (!baseRegex || !extractions.length) {
+    return baseRegex;
+  }
+
+  let modifiedRegex = baseRegex;
+  let captureIndex = 0;
+
+  const capturePattern = /\((?!\?)([^)]*?)\)/g;
+
+  modifiedRegex = modifiedRegex.replace(capturePattern, (match, innerPattern) => {
+    const extraction = extractions[captureIndex];
+    captureIndex++;
+
+    if (extraction && extraction.userSelected && extraction.label && !extraction.label.startsWith('var_')) {
+      const sanitizedName = extraction.label.replace(/[^a-zA-Z0-9_]/g, '_');
+      return `(?P<${sanitizedName}>${innerPattern})`;
+    }
+
+    return `(?:${innerPattern})`;
+  });
+
+  return modifiedRegex;
 }
 
 export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
@@ -67,6 +91,13 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
   const [selectionFrameKey, setSelectionFrameKey] = useState(Date.now());
   const [selectionFrameQueryString, setSelectionFrameQueryString] = useState('');
   const [extractionFrameQueryString, setExtractionFrameQueryString] = useState('');
+
+  const logQLRegex = useMemo(() => {
+    if (!regex || !extractions.length) {
+      return regex;
+    }
+    return generateLogQLNamedCaptureRegex(regex, extractions);
+  }, [regex, extractions]);
 
   const updateSelectionFrameQueryString = (message: string, extractions: LogLineExtractionMatch[]) => {
     let queryString = `?sampleText=${encodeURIComponent(message)}`;
@@ -133,68 +164,93 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
   }, [logMessage, query]);
 
   useEffect(() => {
+    function safeParseMaybeString(data: any) {
+      if (typeof data !== 'string') {
+        return data;
+      }
+      try {
+        return JSON.parse(data);
+      } catch (e) {
+        const sanitized = data.replace(/[\u0000-\u001F]/g, '');
+        try {
+          return JSON.parse(sanitized);
+        } catch (e2) {
+          console.warn('[Extract] postMessage: failed to parse even after sanitize', e2);
+          return undefined;
+        }
+      }
+    }
+
     const postMessageListener = (event: MessageEvent) => {
       const isSelectionFrame = selectionFrame.current?.contentWindow === event.source;
       const isExtractionFrame = extractionFrame.current?.contentWindow === event.source;
+      if (!(isSelectionFrame || isExtractionFrame)) {
+        return;
+      }
+      if (event.data == null) {
+        return;
+      }
 
-      if ((isSelectionFrame || isExtractionFrame) && !!event.data) {
-        const payload = JSON.parse(event.data);
-        const { regex, selections }: { regex: string; selections: string } = payload;
+      const payload: any = safeParseMaybeString(event.data);
+      if (!payload || typeof payload !== 'object') {
+        return;
+      }
 
-        setRegex(regex || '');
+      const { regex, selections }: { regex?: string; selections?: string } = payload;
 
-        if (regex) {
-          setExtractions((prevExtractions) => {
-            const newExtractions = (selections || '')
-              .split(',')
-              .map((pair: string) => {
-                if (!pair) {
-                  return undefined;
-                }
-                const parts = pair.split('|');
-                if (parts.length === 2) {
-                  const index = parseInt(parts[0], 10);
-                  const recognizerName = parts[1];
-                  const prevMatch = prevExtractions.find(
-                    (ext) => ext.index === index && ext.recognizerName === recognizerName
-                  );
-                  const label = prevMatch?.label || '';
-                  const userSelected = prevMatch?.userSelected || isSelectionFrame;
+      setRegex(regex || '');
 
-                  return {
-                    index,
-                    recognizerName,
-                    dataType: getDataTypeOfRecognizer(recognizerName),
-                    sampleValue: '',
-                    label,
-                    userSelected,
-                  } as LogLineExtractionMatch;
-                }
+      if (regex) {
+        setExtractions((prevExtractions) => {
+          const newExtractions = (selections || '')
+            .split(',')
+            .map((pair: string) => {
+              if (!pair) {
                 return undefined;
-              })
-              .filter(Boolean)
-              .sort((a, b) => a!.index - b!.index) as LogLineExtractionMatch[];
-
-            try {
-              const re = new RegExp(regex, 'g');
-              const matches = Array.from(logMessage.matchAll(re));
-              if (matches.length === 1 && matches[0].length > 1) {
-                const samples = matches[0].slice(1);
-                if (samples.length === newExtractions.length) {
-                  newExtractions.forEach((ext, i) => {
-                    ext.sampleValue = samples[i];
-                  });
-                }
               }
-            } catch {}
+              const parts = pair.split('|');
+              if (parts.length !== 2) {
+                return undefined;
+              }
+              const index = parseInt(parts[0], 10);
+              const recognizerName = parts[1];
+              const prevMatch = prevExtractions.find(
+                (ext) => ext.index === index && ext.recognizerName === recognizerName
+              );
+              const label = prevMatch?.label || '';
+              const userSelected = prevMatch?.userSelected || isSelectionFrame;
 
-            if (isSelectionFrame) {
-              updateExtractionFrameQueryString(logMessage, newExtractions);
+              return {
+                index,
+                recognizerName,
+                dataType: getDataTypeOfRecognizer(recognizerName),
+                sampleValue: '',
+                label,
+                userSelected,
+              } as LogLineExtractionMatch;
+            })
+            .filter(Boolean)
+            .sort((a, b) => a!.index - b!.index) as LogLineExtractionMatch[];
+
+          try {
+            const re = new RegExp(regex, 'g');
+            const matches = Array.from(logMessage.matchAll(re));
+            if (matches.length === 1 && matches[0].length > 1) {
+              const samples = matches[0].slice(1);
+              if (samples.length === newExtractions.length) {
+                newExtractions.forEach((ext, i) => {
+                  ext.sampleValue = samples[i];
+                });
+              }
             }
+          } catch {}
 
-            return newExtractions;
-          });
-        }
+          if (isSelectionFrame) {
+            updateExtractionFrameQueryString(logMessage, newExtractions);
+          }
+
+          return newExtractions;
+        });
       }
     };
 
@@ -209,7 +265,6 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
 
     const fields: string[] = [];
     const selections: LogLineExtractionMatch[] = [];
-
     extractions.forEach((ext, index) => {
       const label = ext.userSelected ? ext.label : `var_${index}`;
       fields.push(label);
@@ -225,70 +280,24 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
 
     return {
       regex,
+      logqlRegex: logQLRegex,
       fields,
       selections,
       fp: typeof logLine === 'string' ? logLine : logLine.message,
     };
-  }, [logLine, regex, extractions]);
+  }, [regex, extractions, logLine, logQLRegex]);
 
   const handleExtractClick = async () => {
     if (!queryExtractorParams) {
       return;
     }
 
-    const baseFilter = buildNestedFilter(filters);
-    const queryFilter = {
-      op: 'and',
-      q1: baseFilter,
-      ...(fingerprint
-        ? {
-            q2: {
-              k: '_cardinalhq.fingerprint',
-              v: [String(fingerprint)],
-              op: 'eq',
-              dataType: 'string',
-              extracted: false,
-              computed: false,
-            },
-          }
-        : {}),
-    };
-    const extract = {
-      regex: queryExtractorParams.regex,
-      fields: queryExtractorParams.fields.map((name, i) => ({
-        name,
-        type: queryExtractorParams.selections[i].dataType,
-      })),
-    };
-
-    const payload = {
-      baseExpressions: {
-        a: {
-          dataset: 'logs',
-          limit: 1000,
-          order: 'DESC',
-          returnResults: true,
-          filter: queryFilter,
-          extract: extract,
-        },
-      },
-    };
-    const params = new URLSearchParams({
-      s: `${timeRange.startTime}`,
-      e: `${timeRange.endTime}`,
-    });
-
     try {
-      await fetch(`/api/datasources/${datasourceId}/resources/proxy-stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: `/api/v1/graph?${params.toString()}`, body: payload }),
-      });
       const tagFilters = [
         ...(fingerprint
           ? [
               {
-                tag: '_cardinalhq.fingerprint',
+                tag: 'chq_fingerprint',
                 op: '=',
                 value: [String(fingerprint)],
                 dataType: 'string',
@@ -301,6 +310,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
       onExtractionApply?.(
         {
           regex: queryExtractorParams.regex,
+          logqlRegex: queryExtractorParams.logqlRegex,
           fields: queryExtractorParams.fields,
           selections: queryExtractorParams.selections,
         },

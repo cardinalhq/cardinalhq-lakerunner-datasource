@@ -7,7 +7,6 @@ rm -rf dist
 rm -rf cardinalhq-lakerunner-datasource
 rm -rf cardinalhq-lakerunner-datasource*.zip
 
-npm version patch
 npm run build
 mage
 

@@ -15,7 +15,16 @@ export type Operator =
   | '<'
   | '>='
   | '<=';
-export type ValueAs = 'values' | 'counts' | 'rates_per_second';
+
+export type ValueAs = 'values' | 'counts' | 'rates_per_second' | 'count_over_time' | 'last_over_time';
+
+export const VALUE_AS_OPTIONS: Array<{ label: string; value: ValueAs }> = [
+  { label: 'Values', value: 'values' },
+  { label: 'Counts', value: 'counts' },
+  { label: 'Rate (per second)', value: 'rates_per_second' },
+  { label: 'Count over time', value: 'count_over_time' },
+];
+
 export const OPERATOR_OPTIONS: Array<{ label: string; value: Operator }> = [
   { label: '=', value: '=' },
   { label: '!=', value: '!=' },
@@ -26,14 +35,17 @@ export const OPERATOR_OPTIONS: Array<{ label: string; value: Operator }> = [
   { label: 'regex', value: 'regex' },
   { label: 'not regex', value: 'not regex' },
 ];
+
 export const AGGREGATE_OPTIONS = [
   { label: 'Avg', value: 'avg' },
   { label: 'Sum', value: 'sum' },
   { label: 'Min', value: 'min' },
   { label: 'Max', value: 'max' },
 ];
+
 export type Aggregation = 'avg' | 'sum' | 'min' | 'max';
 export type ChartAggregation = 'avg' | 'sum' | 'min' | 'max';
+
 export const TEXT_OPERATORS: Operator[] = ['contains', 'not contains', 'regex', 'not regex'];
 export const MULTIVALUE_OPERATORS: Operator[] = ['in', 'not_in'];
 export const NUMERIC_OPERATORS: Operator[] = ['=', '>', '<', '>=', '<='];
@@ -48,28 +60,43 @@ export interface Filter {
 }
 
 export interface MyQuery extends DataQuery {
+  aggregationManuallyDeleted: any;
   filters?: Filter[];
   groupBy?: string[];
   queryText?: string;
   constant?: number;
-  mode?: 'logs' | 'metrics' | 'promQL' | 'logQL' | 'traces';
+  mode?: 'logs' | 'metrics' | 'traces';
   metricName?: string;
   metricType?: 'gauge' | 'count' | 'histogram';
-  timeFrom?: number;
-  timeTo?: number;
-  chartAggregation?: ChartAggregation;
   aggregation?: Aggregation;
+  chartAggregation?: ChartAggregation;
+  valueAs?: ValueAs;
   promqlModel?: string;
   promqlDescription?: string;
   promqlOutput?: string;
+  promqlEdited?: boolean;
+  promqlSubTab?: 'builder' | 'code';
+  logqlAggregation?: Aggregation;
   logqlOutput?: string;
+  logqlBuilderExp?: string;
+  logqlEdited?: boolean;
+  logqlSubTab?: 'builder' | 'code';
+  timeFrom?: number;
+  tracesSubTab?: 'builder' | 'code';
+  tracesOutput?: string;
+  tracesEdited?: boolean;
+  tracesBuilderExp?: string;
+  tracesActive?: 'builder' | 'code';
+  timeTo?: number;
   selectedExemplar?: string | null;
   selectedFingerprint?: string;
   chartField?: string;
-  valueAs?: ValueAs;
-  promqlSubTab?: 'builder' | 'AI-assisted';
+  fields?: string[];
+  builderFields?: string[];
+  codeFields?: string[];
   extractor?: {
     regex: string;
+    logqlRegex?: string;
     fields: string[];
     selections: Array<{
       index: number;
@@ -97,9 +124,6 @@ export interface DataSourceResponse {
 export interface MyDataSourceOptions extends DataSourceJsonData {
   customPath?: string;
   enableTraces?: boolean;
-  enablePromQL?: boolean;
-  enableLogQL?: boolean;
-  promQLPath?: string;
 }
 
 export interface MySecureJsonData {

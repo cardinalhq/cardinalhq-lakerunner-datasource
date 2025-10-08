@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -61,8 +60,8 @@ type uiFilter struct {
 }
 
 var userLabelToInternal = map[string]string{
-	"message": "_cardinalhq.message",
-	"level":   "_cardinalhq.level",
+	"message": "log_message",
+	"level":   "log_level",
 }
 
 func mapToInternalLabel(label string) string {
@@ -70,13 +69,6 @@ func mapToInternalLabel(label string) string {
 		return v
 	}
 	return label
-}
-
-func toInternalLabel(s string) string {
-	if s == "" || strings.HasPrefix(s, "_cardinalhq.") {
-		return s
-	}
-	return "_cardinalhq." + s
 }
 
 func cleanFilters(in []uiFilter) []uiFilter {
@@ -174,8 +166,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 
 	startTime := query.TimeRange.From.UnixMilli()
 	endTime := query.TimeRange.To.UnixMilli()
-	path := "/api/v1/graph?s=" + strconv.FormatInt(startTime, 10) + "&e=" + strconv.FormatInt(endTime, 10)
-	fullURL := strings.TrimRight(config.JsonData.CustomPath, "/") + path
+	fullURL := strings.TrimRight(config.JsonData.CustomPath, "/")
 
 	isMetrics := strings.EqualFold(qm.Mode, "metrics")
 	qt := strings.TrimSpace(qm.QueryText)
@@ -185,7 +176,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 
 	if isMetrics && strings.TrimSpace(qm.MetricName) != "" {
 		injected := uiFilter{
-			Tag:      "_cardinalhq.name",
+			Tag:      "_cardinalhq_name",
 			Op:       "=",
 			Value:    []string{qm.MetricName},
 			DataType: "string",
@@ -209,7 +200,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		}
 	}
 	if isLogsVolume && len(groupBys) == 0 {
-		groupBys = []string{"_cardinalhq.level"}
+		groupBys = []string{"log_level"}
 	}
 
 	agg := firstNonEmpty(qm.Aggregation, "sum")
@@ -260,7 +251,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	if err != nil {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
 	}
-	httpReq.Header.Set("api-key", config.Secrets.ApiKey)
+	httpReq.Header.Set("x-cardinalhq-api-key", config.Secrets.ApiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
 
@@ -455,7 +446,7 @@ func (d *Datasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequ
 
 var CallResourceHandler = backend.CallResourceHandlerFunc(func(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	switch req.Path {
-	case "proxy-query", "proxy-stream", "proxy-promql":
+	case "proxy-promql":
 		return handleProxyRequest(ctx, req, sender)
 	default:
 		return sender.Send(&backend.CallResourceResponse{
@@ -491,13 +482,7 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 	if err := json.Unmarshal(req.Body, &incoming); err != nil {
 		return sender.Send(&backend.CallResourceResponse{Status: http.StatusBadRequest, Body: []byte("Invalid request body")})
 	}
-	var basePath string
-	if req.Path == "proxy-promql" && config.JsonData.PromQLPath != "" {
-		basePath = config.JsonData.PromQLPath
-	} else {
-		basePath = config.JsonData.CustomPath
-	}
-
+	var basePath string = config.JsonData.CustomPath
 	fullURL := strings.TrimRight(basePath, "/") + incoming.Path
 
 	var bodyReader io.Reader
@@ -515,7 +500,7 @@ func handleProxyRequest(ctx context.Context, req *backend.CallResourceRequest, s
 	if err != nil {
 		return sender.Send(&backend.CallResourceResponse{Status: http.StatusBadGateway, Body: []byte("Failed to build request")})
 	}
-	httpReq.Header.Set("api-key", config.Secrets.ApiKey)
+	httpReq.Header.Set("x-cardinalhq-api-key", config.Secrets.ApiKey)
 	if isMeta {
 		httpReq.Header.Set("Accept", "*/*")
 	} else {

@@ -21,7 +21,6 @@ export async function runPromQLQuery(
       body: {
         s: String(startTime),
         e: String(endTime),
-        orgId: '65928f26-224b-4acb-8e57-9ee628164694', // TODO: This should go away
         q: target.promqlOutput,
       },
     }),
@@ -29,7 +28,13 @@ export async function runPromQLQuery(
   });
 
   if (!response.ok || !response.body) {
-    throw new Error(`Streaming request failed for query ${target.refId}`);
+    let errDetail = '';
+    try {
+      errDetail = await response.text();
+    } catch {}
+    throw new Error(
+      `PromQL request failed (refId ${target.refId}) http=${response.status}` + (errDetail ? `\n${errDetail}` : '')
+    );
   }
 
   let emitCount = 0;

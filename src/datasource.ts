@@ -1,28 +1,26 @@
 import {
   CoreApp,
   DataFrame,
-  DataFrameType,
   DataQueryRequest,
   DataQueryResponse,
   DataSourceApi,
   DataSourceInstanceSettings,
   DataSourceWithSupplementaryQueriesSupport,
-  FieldType,
+  LoadingState,
   MetricFindValue,
   QueryFixAction,
   ScopedVars,
   SupplementaryQueryOptions,
   SupplementaryQueryType,
-  toDataFrame,
   LegacyMetricFindQueryOptions as VariableQueryOptions,
 } from '@grafana/data';
 import { getTemplateSrv } from '@grafana/runtime';
 import { Observable } from 'rxjs';
 import { runPromQLQuery } from 'services/promql';
-import { buildASTInput } from 'util/astInput';
-import { fetchTagKeys, fetchTagValues, toInternalLabel } from './services/logs';
 import { Filter, MyDataSourceOptions, MyQuery, TEXT_OPERATORS } from './types';
 import { runLogQLQuery } from 'services/logql';
+import { runTracesQuery } from 'services/traces';
+import { fetchTags as fetchTagKeys, fetchTagValues } from './services/tags';
 
 export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
@@ -33,27 +31,54 @@ export class DataSource
       refId: 'A',
       mode: 'logs',
       filters: [],
-      aggregation: 'sum',
+      groupBy: [],
+      aggregation: undefined,
+      logqlAggregation: undefined,
+      valueAs: undefined,
+      queryText: undefined,
+      metricName: undefined,
+      metricType: undefined,
+      chartField: undefined,
+      chartAggregation: undefined,
+      promqlModel: undefined,
+      promqlDescription: undefined,
+      promqlOutput: undefined,
+      promqlEdited: undefined,
+      promqlSubTab: undefined,
+      logqlOutput: undefined,
+      logqlBuilderExp: undefined,
+      logqlEdited: undefined,
+      logqlSubTab: undefined,
+      tracesSubTab: undefined,
+      tracesOutput: undefined,
+      tracesEdited: undefined,
+      tracesBuilderExp: undefined,
+      tracesActive: undefined,
+      timeFrom: undefined,
+      timeTo: undefined,
+      selectedExemplar: undefined,
+      selectedFingerprint: undefined,
+      fields: undefined,
+      builderFields: undefined,
+      codeFields: undefined,
+      extractor: undefined,
     };
   }
 
   modifyQuery(query: MyQuery, action: QueryFixAction): MyQuery {
     const key = action.options?.key;
     const rawVal = action.options?.value;
-
     if (!key || rawVal == null) {
       return query;
     }
     const val = String(rawVal);
     const next = { ...query, filters: [...(query.filters ?? [])] };
     const findFilter = (ops: string[]) => next.filters.find((f) => f.tag === key && ops.includes(String(f.op)));
-
     const pushUnique = (arr: string[], v: string) => {
       if (!arr.includes(v)) {
         arr.push(v);
       }
     };
-
     switch (action.type) {
       case 'ADD_FILTER': {
         let f = findFilter(['in', '=']);
@@ -73,7 +98,6 @@ export class DataSource
         }
         break;
       }
-
       case 'ADD_FILTER_OUT': {
         let f = findFilter(['not_in', '!=']);
         if (!f) {
@@ -92,17 +116,40 @@ export class DataSource
         }
         break;
       }
-
       default:
         return query;
     }
-
     return next;
   }
 
   private fingerprintStore: Record<string, Map<string, string>> = {};
   private prevTopFilter: Record<string, string | undefined> = {};
-
+  private ingestLogsFromFrames(refId: string, frames: DataFrame[]) {
+    const key = this.normalizeRefId(refId);
+    if (!this.fingerprintStore[key]) {
+      this.fingerprintStore[key] = new Map();
+    }
+    for (const frame of frames) {
+      if (!frame.fields) {
+        continue;
+      }
+      const fieldsByName: Record<string, any> = {};
+      frame.fields.forEach((field) => (fieldsByName[field.name] = field.values));
+      const bodyField = fieldsByName['body'] ?? fieldsByName['line'];
+      const fpField = fieldsByName['fingerprint'] ?? fieldsByName['_cardinalhq_fingerprint'] ?? fieldsByName['id'];
+      if (!bodyField || !fpField) {
+        continue;
+      }
+      const len = Math.min(bodyField.length, fpField.length);
+      for (let i = 0; i < len; i++) {
+        const body = String(bodyField.get ? bodyField.get(i) : bodyField[i] ?? '');
+        const fp = String(fpField.get ? fpField.get(i) : fpField[i] ?? '');
+        if (fp && body) {
+          this.addLog(refId, fp, body);
+        }
+      }
+    }
+  }
   private clearLogs(refId: string) {
     const key = this.normalizeRefId(refId);
     this.fingerprintStore[key] = new Map();
@@ -126,7 +173,13 @@ export class DataSource
     const fps = Array.from(this.fingerprintStore[key]?.keys() ?? []);
     return fps;
   }
-
+  private generateFilterKey(filters: Filter[]): string {
+    return filters
+      .filter((f) => f.tag?.trim() && f.value?.some((v) => v?.trim()))
+      .map((f) => `${f.tag}:${f.op}:${(f.value || []).join(',')}`)
+      .sort()
+      .join('|');
+  }
   public getBodies(refId: string): string[] {
     const key = this.normalizeRefId(refId);
     const bodies = Array.from(this.fingerprintStore[key]?.values() ?? []);
@@ -139,13 +192,6 @@ export class DataSource
     this.instanceSettings = instanceSettings;
   }
 
-  public isPromQLEnabled(): boolean {
-    return Boolean(this.instanceSettings.jsonData?.enablePromQL && this.instanceSettings.jsonData.promQLPath);
-  }
-  public isLogQLEnabled(): boolean {
-    return Boolean(this.instanceSettings.jsonData?.enableLogQL && this.instanceSettings.jsonData.promQLPath);
-  }
-
   public isTracesEnabled(): boolean {
     return Boolean(this.instanceSettings.jsonData?.enableTraces);
   }
@@ -153,11 +199,9 @@ export class DataSource
   private applyTemplateVariables(q: MyQuery, scopedVars: ScopedVars): MyQuery {
     const tsrv = getTemplateSrv();
     const repl = (v?: string, fmt?: string) => (v == null ? v : tsrv.replace(v, scopedVars, fmt));
-
     const expandValues = (op: string, vals: string[] = []) => {
       const isTextOrRegex = TEXT_OPERATORS.includes(op as any) || op === 'regex' || op === 'not regex';
       const fmt = isTextOrRegex ? 'regex' : 'csv';
-
       const out: string[] = [];
       for (const raw of vals) {
         const rep = repl(raw, fmt) ?? '';
@@ -176,7 +220,6 @@ export class DataSource
       }
       return out.length ? out : vals;
     };
-
     return {
       ...q,
       metricName: repl(q.metricName),
@@ -186,11 +229,12 @@ export class DataSource
         value: expandValues(f.op, f.value),
       })),
       groupBy: (q.groupBy ?? []).map((g) => repl(g) as string),
+      aggregation: q.aggregation,
+      logqlAggregation: q.logqlAggregation,
       queryText: q.queryText,
       metricType: q.metricType,
       chartField: q.chartField,
       chartAggregation: q.chartAggregation,
-      aggregation: q.aggregation,
       extractor: q.extractor,
     };
   }
@@ -200,7 +244,7 @@ export class DataSource
   }
 
   getSupplementaryQuery(options: SupplementaryQueryOptions, query: MyQuery): MyQuery | undefined {
-    const isMetricsLike = query.mode === 'metrics' || query.mode === 'promQL';
+    const isMetricsLike = query.mode === 'metrics';
     const isTracesLike = query.mode === 'traces';
     if (isMetricsLike && options.type === SupplementaryQueryType.LogsVolume) {
       return undefined;
@@ -208,20 +252,11 @@ export class DataSource
     if ((isMetricsLike || isTracesLike) && options.type === SupplementaryQueryType.LogsSample) {
       return undefined;
     }
-
     switch (options.type) {
       case SupplementaryQueryType.LogsVolume:
-        return {
-          ...query,
-          refId: `volume-${query.refId}`,
-          queryText: 'volume',
-        };
+        return { ...query, refId: `volume-${query.refId}`, queryText: 'volume' };
       case SupplementaryQueryType.LogsSample:
-        return {
-          ...query,
-          refId: `sample-${query.refId}`,
-          queryText: 'sample',
-        };
+        return { ...query, refId: `sample-${query.refId}`, queryText: 'sample' };
       default:
         return undefined;
     }
@@ -235,7 +270,6 @@ export class DataSource
     if (!this.getSupportedSupplementaryQueryTypes().includes(type)) {
       return undefined;
     }
-
     const targets = request.targets
       .map((query) => this.getSupplementaryQuery({ type, ...options }, query))
       .filter((q): q is MyQuery => !!q);
@@ -244,47 +278,56 @@ export class DataSource
 
   private getDefaultRange(): { s: number; e: number } {
     const e = Date.now();
-    return { s: e - 6 * 60 * 60 * 1000, e }; // last 6h
+    return { s: e - 6 * 60 * 60 * 1000, e };
   }
 
   private parseVarQuery(raw: string): {
     kind: 'keys' | 'values';
     dataset: 'logs' | 'metrics' | 'traces';
-    key?: string;
+    tagName?: string;
+    expr?: string;
     metricName?: string;
     metricType?: string;
   } {
     const tsrv = getTemplateSrv();
     const q = tsrv.replace(String(raw ?? ''), undefined as any).trim();
-
-    const ds = /dataset\s*=\s*(logs|metrics)/i.exec(q)?.[1]?.toLowerCase() as 'logs' | 'metrics' | undefined;
+    const ds = /dataset\s*=\s*(logs|metrics|traces)/i.exec(q)?.[1]?.toLowerCase() as
+      | 'logs'
+      | 'metrics'
+      | 'traces'
+      | undefined;
     const dataset = ds ?? 'logs';
-
     const metricName = /metricName\s*=\s*([^\s,)\]]+)/i.exec(q)?.[1];
-    const metricType = /metricType\s*=\s*([^\s,)\]]+)/i.exec(q)?.[1];
-
-    const valM =
-      /^tag_values\s*\(\s*([^) ,]+).*?\)/i.exec(q) ||
-      /^label_values\s*\(\s*([^) ,]+).*?\)/i.exec(q) ||
-      (/^[A-Za-z0-9_.-]+$/.test(q) ? ([, q] as any) : null);
-
-    if (/^tag_keys\b/i.test(q)) {
-      return { kind: 'keys', dataset, metricName, metricType };
+    const metricType = /metricType\s*=\s*([^\s,)\]]]+)/i.exec(q)?.[1];
+    const exprKV = /expr\s*=\s*([^\s,)\]]]+)/i.exec(q)?.[1];
+    const isKeys = /^tag_keys\b/i.test(q);
+    const labelOnly = /^label_values\s*\(\s*([^) ,]+).*?\)/i.exec(q) || /^tag_values\s*\(\s*([^) ,]+).*?\)/i.exec(q);
+    const exprThenLabel =
+      /^label_values\s*\(\s*([^,]+?)\s*,\s*([^) ,]+)\s*\)/i.exec(q) ||
+      /^tag_values\s*\(\s*([^,]+?)\s*,\s*([^) ,]+)\s*\)/i.exec(q);
+    if (isKeys) {
+      return { kind: 'keys', dataset, metricName, metricType, expr: exprKV };
     }
-    if (valM?.[1]) {
-      return { kind: 'values', dataset, key: valM[1], metricName, metricType };
+    if (exprThenLabel?.[1] && exprThenLabel?.[2]) {
+      const parsedExpr = exprThenLabel[1].trim();
+      const tagName = exprThenLabel[2].trim();
+      return { kind: 'values', dataset, tagName, expr: parsedExpr, metricName, metricType };
     }
-
-    return { kind: 'keys', dataset, metricName, metricType };
+    if (labelOnly?.[1]) {
+      const tagName = labelOnly[1].trim();
+      return { kind: 'values', dataset, tagName, expr: exprKV, metricName, metricType };
+    }
+    if (/^[A-Za-z0-9_.-]+$/.test(q)) {
+      return { kind: 'values', dataset, tagName: q, expr: exprKV, metricName, metricType };
+    }
+    return { kind: 'keys', dataset, metricName, metricType, expr: exprKV };
   }
 
   async metricFindQuery(query: any, options?: VariableQueryOptions): Promise<MetricFindValue[]> {
     const qstr = typeof query === 'string' ? query : query?.query ?? '';
-    const { kind, dataset, key, metricName, metricType } = this.parseVarQuery(qstr);
-
+    const { kind, dataset, tagName, expr, metricName } = this.parseVarQuery(qstr);
     const s = options?.range?.from?.valueOf?.() ?? this.getDefaultRange().s;
     const e = options?.range?.to?.valueOf?.() ?? this.getDefaultRange().e;
-
     if (kind === 'keys') {
       const keys = await fetchTagKeys({
         datasourceId: this.id,
@@ -292,50 +335,56 @@ export class DataSource
         startTime: s,
         endTime: e,
         metricName,
-        metricType,
       });
-      return keys.map((k) => ({ text: k }));
+      return keys.map((k: any) => ({ text: k }));
     }
-
-    if (!key) {
+    if (!tagName) {
       return [];
     }
     const vals = await fetchTagValues({
       datasourceId: this.id,
       mode: dataset,
-      labelName: key,
+      tagName,
       startTime: s,
       endTime: e,
-      metricName,
-      metricType,
+      expr,
     });
-    return vals.map((v) => ({ text: v }));
+    return vals.map((v: any) => ({ text: v }));
   }
 
   async getTagKeys(options?: any): Promise<MetricFindValue[]> {
     const s = options?.range?.from?.valueOf?.() ?? this.getDefaultRange().s;
     const e = options?.range?.to?.valueOf?.() ?? this.getDefaultRange().e;
-    const dataset: 'logs' | 'metrics' = options?.dataset ?? 'logs';
-    const keys = await fetchTagKeys({ datasourceId: this.id, mode: dataset, startTime: s, endTime: e });
-    return keys.map((k) => ({ text: k }));
+    const dataset: 'logs' | 'metrics' | 'traces' = options?.dataset ?? 'logs';
+    const metricName: string | undefined = options?.metricName;
+    const keys = await fetchTagKeys({
+      datasourceId: this.id,
+      mode: dataset,
+      startTime: s,
+      endTime: e,
+      metricName,
+    });
+    return keys.map((k: any) => ({ text: k }));
   }
 
   async getTagValues(options: any): Promise<MetricFindValue[]> {
-    const key = options?.key;
-    if (!key) {
+    const tagName = options?.key;
+    if (!tagName) {
       return [];
     }
     const s = options?.range?.from?.valueOf?.() ?? this.getDefaultRange().s;
     const e = options?.range?.to?.valueOf?.() ?? this.getDefaultRange().e;
     const dataset: 'logs' | 'metrics' | 'traces' = options?.dataset ?? 'logs';
+    const expr: string | undefined = options?.expr;
     const vals = await fetchTagValues({
       datasourceId: this.id,
       mode: dataset,
-      labelName: key,
+      tagName,
       startTime: s,
       endTime: e,
+      expr,
     });
-    return vals.map((v) => ({ text: v }));
+    return vals.map((v: any) => ({ text: v }));
   }
 
   query(request: DataQueryRequest<MyQuery>): Observable<DataQueryResponse> {
@@ -354,16 +403,16 @@ export class DataSource
         return;
       }
       const latestByRef: Record<string, DataFrame[]> = {};
-
       const EMIT_MS = 150;
       let emitScheduled = false;
       let emitTimer: ReturnType<typeof setTimeout> | null = null;
-
-      const emitMerged = () => {
+      const emitMerged = (final = false) => {
         const merged: DataFrame[] = Object.values(latestByRef).flat();
-        subscriber.next({ data: merged });
+        subscriber.next({
+          data: merged,
+          state: final ? LoadingState.Done : LoadingState.Loading,
+        });
       };
-
       const scheduleEmit = () => {
         if (emitScheduled) {
           return;
@@ -381,7 +430,6 @@ export class DataSource
           emitTimer = null;
         }
       });
-
       for (const target of templatedTargets) {
         this.runSingleQuery(target, request.range, controller.signal, (frames: DataFrame[]) => {
           latestByRef[target.refId] = frames;
@@ -394,7 +442,7 @@ export class DataSource
                 emitTimer = null;
                 emitScheduled = false;
               }
-              emitMerged();
+              emitMerged(true);
               subscriber.complete();
             }
           })
@@ -423,656 +471,39 @@ export class DataSource
     signal: AbortSignal,
     emit?: (frames: DataFrame[]) => void
   ): Promise<DataFrame[]> {
-    if (target.mode === 'promQL') {
+    if (target.mode === 'metrics') {
       return runPromQLQuery(this.id, target, range, signal, emit);
     }
-    if (target.mode === 'logQL') {
-      return runLogQLQuery(this.id, target, range, signal, emit);
-    }
-    const ds = this.instanceSettings;
-    const key = this.normalizeRefId(target.refId);
-    const topFilter = target.filters?.[0]
-      ? `${target.filters[0].tag}:${target.filters[0].value?.join(',')}`
-      : undefined;
-
-    if (this.prevTopFilter[key] !== topFilter) {
-      this.clearLogs(key);
-    }
-    this.prevTopFilter[key] = topFilter;
-    const isLogVolumeQuery = target.queryText === 'volume';
-    const isMetrics = target.mode === 'metrics';
-    const isTrace = target.mode === 'traces';
-
-    const rawFilters: Filter[] = target.filters ?? [];
-    const filters: Filter[] = rawFilters.filter((f) => {
-      const isKeyValid = f.tag?.trim();
-      const isValueValid = Array.isArray(f.value) && f.value.some((v) => v?.trim?.());
-      return isKeyValid && isValueValid;
-    });
-
-    const groupBy: string[] = isLogVolumeQuery
-      ? [toInternalLabel('level')]
-      : (target.groupBy ?? []).map(toInternalLabel);
-
-    const chartField = target.chartField;
-    const hasExtractor = !!target.extractor?.regex && Array.isArray(target.extractor.fields);
-    const hasNumericChartField =
-      hasExtractor &&
-      chartField &&
-      target.extractor?.selections?.some((sel) => sel.label === chartField && sel.dataType === 'number');
-
-    const MAX_INITIAL = 1000;
-
-    const HIGHLIGHT_OPS = new Set<string>(['contains', ...TEXT_OPERATORS]);
-
-    const MESSAGE_KEYS = new Set<string>(['_cardinalhq.message', 'log.message', 'message']);
-
-    function expandWordVariants(word: string): string[] {
-      if (!word) {
-        return [];
+    if (target.mode === 'traces') {
+      const key = this.normalizeRefId(target.refId);
+      const topFilter = target.filters?.[0]
+        ? `${target.filters[0].tag}:${target.filters[0].value?.join(',')}`
+        : undefined;
+      if (this.prevTopFilter[key] !== topFilter) {
+        this.clearLogs(key);
       }
-      return [word, word.toLowerCase(), word.toUpperCase(), word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()];
-    }
-
-    const searchWords: string[] = Array.from(
-      new Set(
-        (target.filters ?? []).flatMap((f) => {
-          const tag = toInternalLabel(f.tag || '');
-          if (!MESSAGE_KEYS.has(tag)) {
-            return [];
-          }
-          if (!HIGHLIGHT_OPS.has(String(f.op))) {
-            return [];
-          }
-          if (!Array.isArray(f.value)) {
-            return [];
-          }
-          return f.value
-            .map((v) => v?.trim?.())
-            .filter(Boolean)
-            .flatMap((v) => expandWordVariants(v as string));
-        })
-      )
-    ).slice(0, 20);
-
-    const from = range?.from.valueOf();
-    const to = range?.to.valueOf();
-
-    const urlParams = new URLSearchParams();
-    urlParams.set('s', String(from));
-    urlParams.set('e', String(to));
-    if (isLogVolumeQuery) {
-      urlParams.set('timeseriesOnly', 'true');
-    }
-
-    const astInput = buildASTInput(target);
-
-    const response = await fetch(`/api/datasources/${this.id}/resources/proxy-stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        path: `/api/v1/graph?${urlParams.toString()}`,
-        body: astInput,
-      }),
-      signal,
-    });
-
-    if (!response.ok || !response.body) {
-      throw new Error(`Streaming request failed for query ${target.refId}`);
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-
-    const frameData: Record<string, { timestamps: number[]; values: number[] }> = {};
-    const timestamps: number[] = [];
-    const bodies: string[] = [];
-    const severities: string[] = [];
-    const ids: string[] = [];
-    const labelsArr: any[] = [];
-    const fingerprints: string[] = [];
-
-    let emitCount = 0;
-    let totalLogs = 0;
-    let buffer = '';
-    const frames: DataFrame[] = [];
-
-    let lastEmit = 0;
-    const shouldEmit = () => !!emit && (emitCount % 50 === 0 || performance.now() - lastEmit > 250);
-    const didEmit = () => {
-      lastEmit = performance.now();
-    };
-
-    const flushMetricFramesInto = (dst: DataFrame[] = frames) => {
-      const levelColors: Record<string, string> = {
-        debug: '#C8C8C8',
-        info: '#32CD32',
-        warn: '#FFD700',
-        error: '#DC143C',
-      };
-
-      for (const [label, series] of Object.entries(frameData)) {
-        const ref = target.refId;
-        const match = /^level=(\w+)$/.exec(label);
-        const level = match?.[1];
-
-        const labels = level ? { level, detected_level: level } : undefined;
-        const displayName = level ? `{detected_level="${level}", level="${level}"}` : label;
-
-        const color = levelColors[level?.toLowerCase() ?? ''] ?? undefined;
-
-        const frame = toDataFrame({
-          refId: ref,
-          name: label,
-          fields: [
-            { name: 'Time', type: FieldType.time, values: series.timestamps.slice() },
-            {
-              name: 'Value',
-              type: FieldType.number,
-              values: series.values.slice(),
-              labels,
-              config: {
-                displayNameFromDS: displayName,
-                color: color ? { mode: 'fixed', fixedColor: color } : { mode: 'palette-classic' },
-              },
-            },
-          ],
-        });
-
-        (frame.meta as any) = { preferredVisualisationType: 'graph' };
-        dst.push(frame);
-      }
-    };
-
-    const buildLogsSnapshot = (): DataFrame => {
-      const frame = toDataFrame({
-        refId: target.refId,
-        name: 'logs',
-        fields: [
-          { name: 'timestamp', type: FieldType.time, values: timestamps.slice() },
-          { name: 'body', type: FieldType.string, values: bodies.slice() },
-          { name: 'severity', type: FieldType.string, values: severities.slice() },
-          { name: 'id', type: FieldType.string, values: ids.slice() },
-          { name: 'labels', type: FieldType.other, values: labelsArr.slice() },
-        ],
-      });
-      frame.meta = {
-        type: DataFrameType.LogLines,
-        preferredVisualisationType: 'logs',
-        custom: {
-          limit: 1000,
-          ...(searchWords.length ? { searchWords } : {}),
-        },
-      };
-      return frame;
-    };
-
-    const getTraceId = (tags: Record<string, any>): string => String(tags['_cardinalhq.span_trace_id'] ?? '');
-
-    const getSpanId = (tags: Record<string, any>, i: number): string => String(tags['_cardinalhq.span_span_id'] ?? '');
-
-    const getParentSpanId = (tags: Record<string, any>): string => String(tags['span.parent_span_id'] ?? '');
-
-    const getStartTs = (tags: Record<string, any>, fallbackTs: number): number =>
-      Number(tags['span.start_timestamp'] ?? '');
-
-    const getDurationMs = (tags: Record<string, any>): number => {
-      const ms = tags['span.duration_ms'] ?? '';
-      if (ms != null && !Number.isNaN(Number(ms))) {
-        return Number(ms);
-      }
-      const sec = tags['_cardinalhq.span_duration'];
-      if (sec != null && !Number.isNaN(Number(sec))) {
-        return Math.max(1, Math.round(Number(sec) * 1000));
-      }
-      return 1;
-    };
-
-    const getServiceName = (tags: Record<string, any>): string => String(tags['resource.service.name'] ?? '');
-
-    const getOperationName = (tags: Record<string, any>, body?: string): string => String(tags['span.name'] ?? '');
-
-    const selectedTraceId = filters.find(
-      (f) =>
-        toInternalLabel(f.tag) === '_cardinalhq.span_trace_id' &&
-        f.op === '=' &&
-        Array.isArray(f.value) &&
-        f.value.length === 1 &&
-        String(f.value[0]).trim() !== ''
-    )?.value?.[0];
-
-    const buildTraceTable = (): DataFrame => {
-      const traceID: string[] = [];
-      const spanID: string[] = [];
-      const parentSpanID: string[] = [];
-      const service: string[] = [];
-      const timestamp: number[] = [];
-      const duration: number[] = [];
-      const name: string[] = [];
-
-      for (let i = 0; i < timestamps.length; i++) {
-        const tags = labelsArr[i] ?? {};
-        const tid = getTraceId(tags);
-        if (!tid) {
-          continue;
-        }
-
-        traceID.push(tid);
-        spanID.push(getSpanId(tags, i));
-        parentSpanID.push(getParentSpanId(tags));
-        service.push(getServiceName(tags));
-        timestamp.push(getStartTs(tags, Number(timestamps[i])));
-        duration.push(getDurationMs(tags));
-        name.push(getOperationName(tags));
-      }
-
-      const frame = toDataFrame({
-        refId: target.refId,
-        name: 'Traces',
-        fields: [
-          {
-            name: 'spanID',
-            type: FieldType.string,
-            values: spanID,
-            config: {
-              displayName: 'Span ID',
-              links: [
-                {
-                  title: 'View trace for span ${__value.raw}',
-                  url: '',
-                  internal: {
-                    datasourceUid: ds.uid,
-                    datasourceName: ds.name,
-                    query: {
-                      refId: 'A',
-                      mode: 'traces',
-                      queryType: 'traceql',
-                      filters: [{ tag: '_cardinalhq.span_trace_id', op: '=', value: ['${__data.fields.traceID}'] }],
-                      groupBy: [],
-                    },
-                    panelsState: {
-                      trace: { spanId: '${__value.raw}' },
-                    },
-                  },
-                },
-              ],
-            },
-          },
-          {
-            name: 'service',
-            type: FieldType.string,
-            values: service,
-            config: {
-              displayName: 'Service Name',
-              align: 'center',
-              minWidth: 140,
-            },
-          },
-          { name: 'name', type: FieldType.string, values: name, config: { displayName: 'Span Name' } },
-          { name: 'timestamp', type: FieldType.time, values: timestamp, config: { displayName: 'Start Time' } },
-          {
-            name: 'durationMs',
-            type: FieldType.number,
-            values: duration,
-            config: {
-              displayName: 'Duration',
-              unit: 'ms',
-              decimals: 0,
-              custom: {
-                align: 'right',
-              },
-            },
-          },
-          {
-            name: 'traceID',
-            type: FieldType.string,
-            values: traceID,
-            config: {
-              displayName: 'Trace ID',
-            },
-          },
-        ],
-      });
-
-      frame.meta = { preferredVisualisationType: 'table' };
-      return frame;
-    };
-    const isInternal = (k: string) => k.startsWith('_cardinalhq');
-    const isResource = (k: string) => k.startsWith('resource.');
-
-    const toKVs = (obj: Record<string, any>) => Object.entries(obj ?? {}).map(([key, value]) => ({ key, value }));
-
-    const splitTags = (all: Record<string, any>) => {
-      const kvs = toKVs(all).filter(({ key }) => !isInternal(key));
-      const resourceTags = kvs.filter(({ key }) => isResource(key));
-      const spanTags = kvs.filter(({ key }) => !isResource(key));
-      return { spanTags, resourceTags };
-    };
-    type SpanEvent = {
-      timestamp: number;
-      name: string;
-      fields: Array<{ key: string; value: any }>;
-    };
-
-    const getSpanEvents = (tags: Record<string, any>): SpanEvent[] => {
-      const raw = tags['_cardinalhq.span_events'];
-      let events: any[] = [];
-      if (raw) {
-        try {
-          events = typeof raw === 'string' ? JSON.parse(raw) : Array.isArray(raw) ? raw : [];
-        } catch {
-          events = [];
-        }
-      }
-      return events
-        .map((e) => {
-          const tsRaw = e?.timestamp;
-          const ts = Number(tsRaw);
-          const attrs = e?.attributes ?? {};
-
-          const hasAny =
-            attrs['exception.type'] != null ||
-            attrs['exception.message'] != null ||
-            attrs['exception.stacktrace'] != null;
-
-          if (!hasAny || !Number.isFinite(ts)) {
-            return null;
-          }
-
-          const fields: Array<{ key: string; value: any }> = [];
-          if (attrs['exception.type'] != null) {
-            fields.push({ key: 'exception.type', value: attrs['exception.type'] });
-          }
-          if (attrs['exception.message'] != null) {
-            fields.push({ key: 'exception.message', value: attrs['exception.message'] });
-          }
-          if (attrs['exception.stacktrace'] != null) {
-            fields.push({ key: 'exception.stacktrace', value: attrs['exception.stacktrace'] });
-          }
-
-          return {
-            timestamp: ts,
-            name: e?.name ?? 'exception',
-            fields,
-          } as SpanEvent;
-        })
-        .filter((ev): ev is SpanEvent => !!ev);
-    };
-
-    const buildTraceWaterfall = (): DataFrame => {
-      const traceID: string[] = [];
-      const spanID: string[] = [];
-      const parentSpanID: string[] = [];
-      const serviceName: string[] = [];
-      const operationName: string[] = [];
-      const startTime: number[] = [];
-      const duration: number[] = [];
-
-      const tagsCol: Array<Array<{ key: string; value: any }>> = [];
-      const serviceTagsCol: Array<Array<{ key: string; value: any }>> = [];
-      const logsCol: Array<Array<{ timestamp: number; name?: string; fields: Array<{ key: string; value: any }> }>> =
-        [];
-      const refsCol: Array<Array<{ traceID: string; spanID: string; tags?: Array<{ key: string; value: any }> }>> = [];
-
-      for (let i = 0; i < timestamps.length; i++) {
-        const tags = labelsArr[i] ?? {};
-        const tid = getTraceId(tags);
-        if (selectedTraceId && tid !== selectedTraceId) {
-          continue;
-        }
-
-        const ts = getStartTs(tags, Number(timestamps[i]));
-        const sId = getSpanId(tags, i);
-        const pId = getParentSpanId(tags);
-        const svc = getServiceName(tags);
-        const op = getOperationName(tags, bodies[i]);
-        const durMs = getDurationMs(tags);
-
-        const { spanTags, resourceTags } = splitTags(tags);
-
-        traceID.push(tid);
-        spanID.push(sId);
-        parentSpanID.push(pId);
-        serviceName.push(svc);
-        operationName.push(op);
-        startTime.push(ts);
-        duration.push(durMs);
-
-        tagsCol.push(spanTags);
-        serviceTagsCol.push(resourceTags);
-        logsCol.push(getSpanEvents(tags));
-        refsCol.push([]);
-      }
-
-      const fields: any[] = [
-        { name: 'traceID', type: FieldType.string, values: traceID },
-        { name: 'spanID', type: FieldType.string, values: spanID },
-        { name: 'parentSpanID', type: FieldType.string, values: parentSpanID },
-        { name: 'serviceName', type: FieldType.string, values: serviceName },
-        { name: 'operationName', type: FieldType.string, values: operationName },
-        { name: 'startTime', type: FieldType.number, values: startTime },
-        { name: 'duration', type: FieldType.number, values: duration },
-        { name: 'tags', type: FieldType.other, values: tagsCol },
-        { name: 'serviceTags', type: FieldType.other, values: serviceTagsCol },
-        { name: 'events', type: FieldType.other, values: logsCol },
-        { name: 'logs', type: FieldType.other, values: logsCol },
-        { name: 'references', type: FieldType.other, values: refsCol },
-      ];
-
-      const frame = toDataFrame({ refId: target.refId, name: 'Traces', fields });
-      frame.meta = { preferredVisualisationType: 'trace', custom: { traceFormat: 'otlp' } } as any;
-      return frame;
-    };
-    const isTraceDetail =
-      isTrace &&
-      filters.some(
-        (f) =>
-          toInternalLabel(f.tag) === '_cardinalhq.span_trace_id' &&
-          f.op === '=' &&
-          Array.isArray(f.value) &&
-          f.value.length === 1 &&
-          String(f.value[0]).trim() !== ''
+      this.prevTopFilter[key] = topFilter;
+      return runTracesQuery(
+        this.id,
+        { uid: this.instanceSettings.uid!, name: this.instanceSettings.name! },
+        target,
+        range,
+        signal,
+        emit
       );
-
-    const flushMetricFrames = () => {
-      flushMetricFramesInto(frames);
-    };
-
-    const flushLogFrame = () => {
-      const frame = isTraceDetail ? buildTraceWaterfall() : isTrace ? buildTraceTable() : buildLogsSnapshot();
-      frames.push(frame);
-    };
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) {
-        break;
-      }
-      buffer += decoder.decode(value, { stream: true });
-
-      const lines = buffer.split('\n');
-      buffer = lines.pop()!;
-
-      for (const rawLine of lines) {
-        const line = rawLine.trim();
-        if (!line.startsWith('data:')) {
-          continue;
-        }
-        try {
-          const parsed = JSON.parse(line.slice(5).trim());
-          const msg = parsed.message;
-          if (!msg) {
-            continue;
-          }
-          if (parsed.type === 'timeseries' && hasNumericChartField && !isMetrics && !isLogVolumeQuery && !isTrace) {
-            const value = msg.value;
-            const tags = msg.tags || {};
-
-            if (typeof value === 'number' && !isNaN(value)) {
-              const groupParts = groupBy.map((key) => {
-                const prettyKey = key.replace(/^_cardinalhq\./, '');
-                return `${prettyKey}=${tags[key] ?? 'unknown'}`;
-              });
-              const base = `${chartField}=extracted`;
-              const label = groupParts.length ? `${base}, ${groupParts.join(', ')}` : base;
-
-              if (!frameData[label]) {
-                frameData[label] = { timestamps: [], values: [] };
-              }
-              const ts = msg.timestamp;
-              frameData[label].timestamps.push(ts);
-              frameData[label].values.push(value);
-              emitCount++;
-            }
-          } else if (isMetrics) {
-            const ts = msg.timestamp;
-            const val = msg.value ?? 0;
-            const tags = msg.tags ?? {};
-            const labelParts: string[] = groupBy.map((key) => {
-              const prettyKey = key.replace(/^_cardinalhq\./, '');
-              return `${prettyKey}=${tags[key] ?? 'unknown'}`;
-            });
-
-            const label = labelParts.length ? labelParts.join(', ') : isMetrics ? target.metricName ?? 'metric' : '';
-
-            if (!frameData[label]) {
-              frameData[label] = { timestamps: [], values: [] };
-            }
-
-            frameData[label].timestamps.push(ts);
-            frameData[label].values.push(val);
-
-            emitCount++;
-          } else if (parsed.type === 'timeseries' && msg.tags?.name === 'log.events' && !isTrace) {
-            const ts = msg.timestamp;
-            const val = msg.value ?? 0;
-            const tags = msg.tags || {};
-
-            const labelParts = groupBy.map((key) => {
-              const prettyKey = key.replace(/^_cardinalhq\./, '');
-              return `${prettyKey}=${tags[key] ?? 'unknown'}`;
-            });
-            const label = labelParts.length > 0 ? labelParts.join(', ') : tags.name || 'log.events';
-
-            if (!frameData[label]) {
-              frameData[label] = { timestamps: [], values: [] };
-            }
-            frameData[label].timestamps.push(ts);
-            frameData[label].values.push(val);
-            emitCount++;
-          } else if (parsed.type === 'event' && isTrace) {
-            const ts = msg.timestamp;
-            const fingerprint = String(msg.tags?.['_cardinalhq.fingerprint'] ?? '');
-            const level = msg.tags?.['_cardinalhq.level'] || '';
-            const message = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
-
-            totalLogs++;
-
-            if (totalLogs <= MAX_INITIAL) {
-              timestamps.push(ts);
-              fingerprints.push(fingerprint);
-              severities.push(level);
-              bodies.push(message);
-              labelsArr.push(msg.tags || {});
-            } else {
-              const frame = isTraceDetail ? buildTraceWaterfall() : buildTraceTable();
-              frames.push(frame);
-              if (emit) {
-                emit([frame]);
-              }
-            }
-          } else if (parsed.type === 'event' && !isTrace) {
-            const ts = msg.timestamp;
-            const body = msg.tags?.['_cardinalhq.message'] || msg.tags?.['log.message'] || msg.tags?.message || '';
-            const severity = msg.tags?.['_cardinalhq.level'] || '';
-            const id = msg.tags?.['_cardinalhq.id'] || '';
-            const fingerprint = msg.tags?.['_cardinalhq.fingerprint'] || '';
-            const rawTags = msg.tags || {};
-            const labelTags: Record<string, any> = {};
-
-            if (fingerprint && body) {
-              this.addLog(target.refId, fingerprint, body);
-            }
-
-            if (rawTags['_cardinalhq.message']) {
-              labelTags['message'] = rawTags['_cardinalhq.message'];
-            }
-            if (rawTags['_cardinalhq.level']) {
-              labelTags['level'] = rawTags['_cardinalhq.level'];
-            }
-            for (const [k, v] of Object.entries(rawTags)) {
-              if (!k.startsWith('_cardinalhq.') && !k.startsWith('nlp')) {
-                labelTags[k] = v;
-              }
-            }
-
-            totalLogs++;
-            if (totalLogs <= MAX_INITIAL) {
-              timestamps.push(ts);
-              bodies.push(body);
-              severities.push(severity);
-              ids.push(id);
-              labelsArr.push(labelTags);
-              fingerprints.push(fingerprint);
-            } else {
-              const frame = toDataFrame({
-                refId: target.refId,
-                name: 'logs',
-                fields: [
-                  { name: 'timestamp', type: FieldType.time, values: [ts] },
-                  { name: 'body', type: FieldType.string, values: [body] },
-                  { name: 'severity', type: FieldType.string, values: [severity] },
-                  { name: 'id', type: FieldType.string, values: [id] },
-                  { name: 'labels', type: FieldType.other, values: [labelTags] },
-                  { name: 'fingerprint', type: FieldType.string, values: fingerprints.slice() },
-                ],
-              });
-              frame.meta = {
-                type: DataFrameType.LogLines,
-                preferredVisualisationType: 'logs',
-                custom: {
-                  limit: 1000,
-                  ...(searchWords.length ? { searchWords } : {}),
-                },
-              };
-
-              frames.push(frame);
-              if (emit) {
-                emit([frame]);
-              }
-            }
-          }
-          if (shouldEmit()) {
-            const batch: DataFrame[] = [];
-            flushMetricFramesInto(batch);
-            if (!isMetrics && totalLogs > 0 && totalLogs <= MAX_INITIAL) {
-              batch.push(isTraceDetail ? buildTraceWaterfall() : isTrace ? buildTraceTable() : buildLogsSnapshot());
-            }
-            if (batch.length) {
-              emit!(batch);
-            }
-            didEmit();
-          }
-        } catch (err) {}
-      }
     }
-
-    if (isMetrics || target.queryText === 'volume') {
-      flushMetricFrames();
-    } else {
-      if (Object.keys(frameData).length > 0) {
-        flushMetricFrames();
+    if (target.mode === 'logs') {
+      const key = this.normalizeRefId(target.refId);
+      const currentFilterKey = this.generateFilterKey(target.filters ?? []);
+      if (this.prevTopFilter[key] !== currentFilterKey) {
+        this.clearLogs(key);
+        this.prevTopFilter[key] = currentFilterKey;
       }
-      if (totalLogs > 0 && totalLogs <= MAX_INITIAL) {
-        flushLogFrame();
-      }
+      const frames = await runLogQLQuery(this.id, target, range, signal, emit);
+      this.ingestLogsFromFrames(target.refId, frames);
+      return frames;
     }
-
-    if (emit && frames.length) {
-      emit(frames);
-    }
-
-    return frames;
+    return [];
   }
 
   async testDatasource() {

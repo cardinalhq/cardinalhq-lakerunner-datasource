@@ -1,6 +1,6 @@
 {
   "name": "cardinalhq-lakerunner-datasource",
-  "version": "1.1.14",
+  "version": "1.2.0-rc.21",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
     "dev": "webpack -w -c ./.config/webpack/webpack.config.ts --env development",
@@ -11,7 +11,7 @@
     "lint:fix": "npm run lint -- --fix && prettier --write --list-different .",
     "e2e": "playwright test",
     "server": "docker compose up --build",
-    "sign": "npx --yes @grafana/sign-plugin@latest --rootUrls=http://localhost:3000,https://grafana.cardinalhq.io"
+    "sign": "npx --yes @grafana/sign-plugin@latest --rootUrls=http://localhost:3000,https://grafana.cardinalhq.io,https://grafana.test.cardinalhq.io"
   },
   "author": "Cardinal HQ",
   "license": "AGPL-3.0-only",
@@ -68,10 +68,10 @@
   },
   "dependencies": {
     "@emotion/css": "11.10.6",
-    "@grafana/data": "^12.0.2",
-    "@grafana/runtime": "^12.0.2",
-    "@grafana/schema": "^12.0.2",
-    "@grafana/ui": "^12.0.2",
+    "@grafana/data": "^12.2.0",
+    "@grafana/runtime": "^12.2.0",
+    "@grafana/schema": "^12.2.0",
+    "@grafana/ui": "^12.2.0",
     "@tanstack/react-query": "^5.81.5",
     "ahooks": "^3.9.0",
     "event-source-polyfill": "^1.0.31",

@@ -7,9 +7,9 @@
 }
 
 #rg_loading > div {
-  background-color: var(--bs-gray-800)!important;
-  margin-left: auto!important;
-  margin-right: auto!important;
+  background-color: var(--bs-gray-800) !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
 }
 
 .rg-hidden {
@@ -20,7 +20,14 @@
   opacity: 0.7;
 }
 
-h1, h2, h3, h4, h5, h6, label, small {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+label,
+small {
   -webkit-user-select: none;
   user-select: none;
 }
@@ -50,11 +57,12 @@ h5 i {
   font-family: Consolas, monospace;
 }
 
-.rg-code-accordion pre[class*=language-]>code {
+.rg-code-accordion pre[class*='language-'] > code {
   box-shadow: none;
 }
 
-.rg-code-accordion pre[class*=language-]::before, .rg-code-accordion pre[class*=language-]::after {
+.rg-code-accordion pre[class*='language-']::before,
+.rg-code-accordion pre[class*='language-']::after {
   display: none;
 }
 
@@ -110,11 +118,17 @@ h5 i {
 
 .rg-recognizer:hover {
   text-decoration: underline;
-  background-color: rgba(255,255,255,0.2);
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .rg-match-item-stripe/*, .rg-match-item-stripe .rg-recognizer*/ {
-  background: repeating-linear-gradient(-45deg, transparent, transparent 6px, rgba(200, 200, 200, 0.2) 6px, rgba(200, 200, 200, 0.2) 8px);
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgba(200, 200, 200, 0.2) 6px,
+    rgba(200, 200, 200, 0.2) 8px
+  );
 }
 
 .rg-match-item-overlay {
@@ -129,7 +143,7 @@ h5 i {
 }
 
 .rg-glow {
-  box-shadow: 0px 0px 40px 4px rgba(8,8,7,1);
+  box-shadow: 0px 0px 40px 4px rgba(8, 8, 7, 1);
 }
 
 .rg-glow-alert {
@@ -141,7 +155,7 @@ h5 i {
 
 @keyframes blink {
   50% {
-    box-shadow: 0px 0px 40px 4px rgba(8,8,7,1);
+    box-shadow: 0px 0px 40px 4px rgba(8, 8, 7, 1);
   }
 }
 
@@ -177,7 +191,7 @@ h5 i {
 }
 
 .rg-result-part:hover {
-    background-color: lightgray;
+  background-color: lightgray;
 }
 
 .rg-check-box {
@@ -201,7 +215,8 @@ h5 i {
   color: var(--bs-white);
 }
 
-.rg-help-popover p:last-of-type, .rg-help-popover ul {
+.rg-help-popover p:last-of-type,
+.rg-help-popover ul {
   margin-bottom: 0;
 }
 
@@ -238,7 +253,8 @@ h5 i {
   background-color: white;
 }
 
-#rg_result_display, #rg_cap_group_display {
+#rg_result_display,
+#rg_cap_group_display {
   white-space: pre-wrap;
 }
 
@@ -257,8 +273,6 @@ footer a.rounded:hover {
   background-color: #1b1b1b;
 }
 
-
-
 /* Driver things */
 
 .rg-guide#driver-popover-item > .driver-popover-title {
@@ -266,7 +280,6 @@ footer a.rounded:hover {
   font-size: 14pt;
   font-weight: 700;
 }
-
 
 .rg-guide#driver-popover-item > .driver-popover-description {
   font: inherit;
@@ -279,7 +292,7 @@ footer a.rounded:hover {
   border-radius: 5px;
   padding: 7px 10px;
   background-color: #6c757d;
-  color: #F8F9FA;
+  color: #f8f9fa;
   text-shadow: none;
   border: none;
 }
@@ -289,7 +302,6 @@ footer a.rounded:hover {
 }
 
 .rg-guide#driver-popover-item .driver-popover-footer button.driver-disabled {
-  color: #F8F9FA;
-  opacity: .65;
+  color: #f8f9fa;
+  opacity: 0.65;
 }
-

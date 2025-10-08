@@ -52,35 +52,6 @@ export function ConfigEditor(props: Props) {
     });
   };
 
-  const onTogglePromQL = (v: boolean) => {
-    onOptionsChange({
-      ...options,
-      jsonData: {
-        ...options.jsonData,
-        enablePromQL: v,
-      },
-    });
-  };
-  const onPromQLPathChange = (e: ChangeEvent<HTMLInputElement>) => {
-    onOptionsChange({
-      ...options,
-      jsonData: {
-        ...jsonData,
-        promQLPath: e.target.value,
-      },
-    });
-  };
-
-  const onToggleLogQL = (v: boolean) => {
-    onOptionsChange({
-      ...options,
-      jsonData: {
-        ...options.jsonData,
-        enableLogQL: v,
-      },
-    });
-  };
-
   return (
     <>
       <InlineField label="Query API Root">
@@ -104,40 +75,13 @@ export function ConfigEditor(props: Props) {
         />
       </InlineField>
 
-      <div style={{ marginTop: 16 }}>
+      <div style={{ marginTop: 16, display: 'none' }}>
         <InlineField label="Experimental Traces support">
           <InlineSwitch
             value={options.jsonData.enableTraces || false}
             onChange={(e) => onToggleTraces(e.currentTarget.checked)}
           />
         </InlineField>
-      </div>
-      <div style={{ marginTop: 8 }}>
-        <InlineField label="Experimental LogQL support">
-          <InlineSwitch
-            value={options.jsonData.enableLogQL || false}
-            onChange={(e) => onToggleLogQL(e.currentTarget.checked)}
-          />
-        </InlineField>
-      </div>
-      <div style={{ marginTop: 8 }}>
-        <InlineField label="Experimental PromQL support">
-          <InlineSwitch
-            value={options.jsonData.enablePromQL || false}
-            onChange={(e) => onTogglePromQL(e.currentTarget.checked)}
-          />
-        </InlineField>
-        {options.jsonData.enablePromQL && (
-          <InlineField label="PromQL API Root">
-            <Input
-              id="config-editor-path-promql"
-              value={jsonData.promQLPath || ''}
-              onChange={onPromQLPathChange}
-              placeholder="e.g. https://your-api.com"
-              width={40}
-            />
-          </InlineField>
-        )}
       </div>
     </>
   );
