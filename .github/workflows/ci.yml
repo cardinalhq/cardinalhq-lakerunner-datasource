@@ -62,6 +62,8 @@ jobs:
       - name: Test backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: magefile/mage-action@6f50bbb8ea47d56e62dee92392788acbc8192d0b # v3.1.0
+        env:
+          GOTOOLCHAIN: auto
         with:
           version: latest
           args: coverage
@@ -69,6 +71,8 @@ jobs:
       - name: Build backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: magefile/mage-action@6f50bbb8ea47d56e62dee92392788acbc8192d0b # v3.1.0
+        env:
+          GOTOOLCHAIN: auto
         with:
           version: latest
           args: buildAll
