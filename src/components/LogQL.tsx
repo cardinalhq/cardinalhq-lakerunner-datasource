@@ -24,6 +24,7 @@ interface Props {
 const HIDDEN_TAGS = new Set<string>(['fingerprint', 'chq_fingerprint', '_cardinalhq_fingerprint']);
 const isHiddenTag = (t?: string) => !!t && HIDDEN_TAGS.has(t.replace(/^"|"$/g, ''));
 const MESSAGE_TAG = 'log_message';
+const SERVICE_NAME_TAG = 'resource_service_name';
 
 export function LogQLTab({
   datasourceId,
@@ -210,7 +211,7 @@ export function LogQLTab({
             datasourceId={datasourceId}
             tags={mergedTags}
             loadingTags={loading}
-            filters={visibleFilters.length ? visibleFilters : [{ tag: '', op: '=', value: [''] }]}
+            filters={visibleFilters.length ? visibleFilters : [{ tag: SERVICE_NAME_TAG, op: '=', value: [''] }]}
             onFiltersChange={(filters: any) => {
               onChangeRef.current({ ...queryRef.current, groupBy: groupByRef.current, filters });
             }}

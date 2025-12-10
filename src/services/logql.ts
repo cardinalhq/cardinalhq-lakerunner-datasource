@@ -21,19 +21,21 @@ function ensureByLevel(expr: string): string {
   const next = Array.from(new Set([...byList, ...want]));
   return `${agg} by (${next.join(',')})(${m[3]})`;
 }
-const DEFAULT_SELECTOR = '{resource_service_name=~".+"}';
+
+export const SKIP_QUERY_MARKER = '__SKIP_QUERY__';
 
 function ensureStreamSelector(expr: string): string {
   const trimmed = (expr ?? '').trim();
+
   if (!trimmed) {
-    return DEFAULT_SELECTOR;
+    return SKIP_QUERY_MARKER;
   }
 
   const hasAnySelector = /\{[^}]*\}/.test(trimmed);
   const hasNonEmptySelector = /\{[^}]*[A-Za-z_][\w.\-]*\s*(?:=|=~|!=|!~)\s*"(?:[^"\\]|\\.)*"[^}]*\}/.test(trimmed);
 
   if (trimmed.startsWith('|')) {
-    return `${DEFAULT_SELECTOR} ${trimmed}`;
+    return SKIP_QUERY_MARKER;
   }
 
   if (hasAnySelector && hasNonEmptySelector) {
@@ -41,15 +43,15 @@ function ensureStreamSelector(expr: string): string {
   }
 
   if (hasAnySelector && !hasNonEmptySelector) {
-    return trimmed.replace(/\{\s*\}/g, DEFAULT_SELECTOR);
+    return SKIP_QUERY_MARKER;
   }
 
   const firstPipe = trimmed.indexOf('|');
   if (firstPipe > -1) {
-    return `${DEFAULT_SELECTOR} ${trimmed.slice(firstPipe)}`;
+    return SKIP_QUERY_MARKER;
   }
 
-  return `${DEFAULT_SELECTOR} ${trimmed}`;
+  return SKIP_QUERY_MARKER;
 }
 
 type Labels = Record<string, any>;
@@ -235,6 +237,11 @@ export async function runLogQLQuery(
   }
 
   chosen = ensureStreamSelector(chosen);
+
+  if (chosen === SKIP_QUERY_MARKER) {
+    return [];
+  }
+
   const shouldApplyFingerprint = !target.logqlEdited;
   const expr = shouldApplyFingerprint ? withHiddenFingerprint(chosen, target.selectedFingerprint) : chosen;
   const s = String(startMs);
