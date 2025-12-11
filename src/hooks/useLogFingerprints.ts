@@ -29,6 +29,7 @@ export function useLogFingerprints(
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let loadingDone = false;
 
     const hasData = (fps: string[], bds: string[]) => fps.length > 0 || bds.length > 0;
 
@@ -49,7 +50,8 @@ export function useLogFingerprints(
       if (cancelled) {
         return;
       }
-      if (isLoading && hasData(fps, bds)) {
+      if (!loadingDone && hasData(fps, bds)) {
+        loadingDone = true;
         setIsLoading(false);
       }
 
@@ -81,7 +83,7 @@ export function useLogFingerprints(
       }
       window.removeEventListener('focus', onFocus);
     };
-  }, [datasource, isLoading, refId]);
+  }, [datasource, refId]);
 
   return { fingerprints, bodies, isLoading };
 }
