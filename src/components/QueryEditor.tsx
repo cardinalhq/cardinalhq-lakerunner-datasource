@@ -9,6 +9,21 @@ import TracesTab from './Traces';
 
 type Mode = 'logs' | 'metrics' | 'traces';
 
+const SERVICE_NAME_TAG = 'resource_service_name';
+const DEFAULT_LOGS_FILTER = { tag: SERVICE_NAME_TAG, op: '=' as any, value: [''] };
+
+const hasValidFilterValues = (filters: Filter[]): boolean => {
+  return filters.some((f) => {
+    if (!f.tag) {
+      return false;
+    }
+    if (f.op === 'has') {
+      return true;
+    }
+    return Array.isArray(f.value) && f.value.some((v) => v && v.trim());
+  });
+};
+
 export function QueryEditor({
   query,
   onChange,
@@ -105,10 +120,14 @@ export function QueryEditor({
               onChangeTab={() => {
                 const targetMode = mode;
                 const savedState = stateByModeRef.current[targetMode];
+                let filters = savedState.filters;
+                if (targetMode === 'logs' && (!filters || filters.length === 0 || !hasValidFilterValues(filters))) {
+                  filters = [DEFAULT_LOGS_FILTER];
+                }
                 onChange({
                   ...query,
                   mode: targetMode,
-                  filters: savedState.filters,
+                  filters,
                   groupBy: savedState.groupBy,
                   aggregation: savedState.aggregation,
                   logqlAggregation: savedState.logqlAggregation,

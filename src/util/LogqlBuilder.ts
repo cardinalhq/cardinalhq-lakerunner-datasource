@@ -3,7 +3,7 @@ import { Filter, MyQuery, Operator } from '../types';
 
 const isNonEmpty = (s?: string) => !!s && s.trim().length > 0;
 const esc = (v: string) => v.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-const escRegexAlt = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escRegexAlt = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&');
 const normalizeTag = (tag: string) => tag.replace(/\./g, '_');
 const normalizeWindow = (w: string) => (w === '__interval' ? '$__interval' : w);
 

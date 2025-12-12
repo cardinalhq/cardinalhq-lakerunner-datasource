@@ -40,7 +40,7 @@ function normalizeOp(op: string | undefined): NormalizedOp {
 const q = (s: string) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
 function escapeRegexLiteral(v: string) {
-  return v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return v.replace(/[.*+?^${}()|[\]\\]/g, '\\\\$&');
 }
 
 function toRegexAlternation(values: string[], wrap: 'exact' | 'contains'): string {
