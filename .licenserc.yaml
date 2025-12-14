@@ -1,0 +1,42 @@
+header:
+  license:
+    spdx-id: AGPL-3.0-only
+    copyright-owner: CardinalHQ, Inc
+    copyright-year: 2025-2026
+
+  paths-ignore:
+    - 'bin'
+    - 'dist'
+    - 'node_modules'
+    - '**/*.md'
+    - 'LICENSE'
+    - .gitignore
+    - .licenserc.yaml
+    - '**/*.yaml'
+    - '**/*.yml'
+    - '**/*.json'
+    - go.sum
+    - go.mod
+    - '**/testdata/**'
+    - .claude
+    - '.config/**'
+    - '.vscode/**'
+    - '.github/**'
+    - 'provisioning/**'
+    - '**/*.css'
+    - '**/*.scss'
+    - '**/*.html'
+    - '.nvmrc'
+    - '.eslintrc'
+    - '.prettierrc.js'
+    - 'jest-setup.js'
+    - 'jest.config.js'
+    - 'tsconfig.json'
+    - 'playwright.config.ts'
+    - 'build.sh'
+    - 'CHANGELOG.md'
+    - '**/*.svg'
+    - '**/*.map'
+    - 'src/static/**'
+
+  comment: on-failure

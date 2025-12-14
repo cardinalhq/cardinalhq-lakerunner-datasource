@@ -5,13 +5,16 @@
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
     "dev": "webpack -w -c ./.config/webpack/webpack.config.ts --env development",
     "test": "jest --watch --onlyChanged",
-    "test:ci": "jest --passWithNoTests --maxWorkers 4",
+    "test:ci": "npm run license:check && jest --passWithNoTests --maxWorkers 4",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --cache --ignore-path ./.gitignore --ext .js,.jsx,.ts,.tsx .",
     "lint:fix": "npm run lint -- --fix && prettier --write --list-different .",
     "e2e": "playwright test",
     "server": "docker compose up --build",
-    "sign": "npx --yes @grafana/sign-plugin@latest --rootUrls=http://localhost:3000,https://grafana.cardinalhq.io,https://grafana.test.cardinalhq.io"
+    "sign": "npx --yes @grafana/sign-plugin@latest --rootUrls=http://localhost:3000,https://grafana.cardinalhq.io,https://grafana.test.cardinalhq.io",
+    "license:install": "./scripts/install-license-tools.sh",
+    "license:check": "./scripts/install-license-tools.sh && ./bin/license-eye header check",
+    "license:fix": "./scripts/install-license-tools.sh && ./bin/license-eye header fix"
   },
   "author": "Cardinal HQ",
   "license": "AGPL-3.0-only",

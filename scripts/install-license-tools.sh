@@ -1,0 +1,35 @@
+#!/bin/bash
+# Copyright (C) 2025-2026 CardinalHQ, Inc
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, version 3.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+set -euo pipefail
+
+LICENSE_EYE_VERSION="latest"
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+BIN_DIR="$PROJECT_ROOT/bin"
+
+mkdir -p "$BIN_DIR"
+
+if [ -x "$BIN_DIR/license-eye" ]; then
+    echo "license-eye already installed at $BIN_DIR/license-eye"
+    exit 0
+fi
+
+echo "Installing license-eye $LICENSE_EYE_VERSION to $BIN_DIR..."
+GOBIN="$BIN_DIR" go install "github.com/apache/skywalking-eyes/cmd/license-eye@$LICENSE_EYE_VERSION"
+
+echo "Installation complete."
+ls -la "$BIN_DIR/license-eye"
