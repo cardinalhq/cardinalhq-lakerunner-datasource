@@ -417,9 +417,8 @@ export async function runLogQLQuery(
 
   let buffer = '';
   let seen = 0;
-  let lastEmit = 0;
-  const shouldEmit = () => !!emit && (seen % 50 === 0 || performance.now() - lastEmit > 250);
-  const didEmit = () => (lastEmit = performance.now());
+  const shouldEmit = () => !!emit;
+  const didEmit = () => {};
 
   while (true) {
     const { value, done } = await reader.read();

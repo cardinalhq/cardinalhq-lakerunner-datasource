@@ -422,6 +422,7 @@ export class DataSource
       const EMIT_MS = 150;
       let emitScheduled = false;
       let emitTimer: ReturnType<typeof setTimeout> | null = null;
+      let firstEmitDone = false;
       const emitMerged = (final = false) => {
         const merged: DataFrame[] = Object.values(latestByRef).flat();
         subscriber.next({
@@ -430,6 +431,11 @@ export class DataSource
         });
       };
       const scheduleEmit = () => {
+        if (!firstEmitDone) {
+          firstEmitDone = true;
+          emitMerged();
+          return;
+        }
         if (emitScheduled) {
           return;
         }
