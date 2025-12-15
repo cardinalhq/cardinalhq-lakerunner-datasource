@@ -327,7 +327,7 @@ export async function runLogQLQuery(
           },
         ],
       });
-      (frame.meta as any) = { preferredVisualisationType: 'graph' };
+      (frame.meta as any) = { preferredVisualizationType: 'graph' };
       dst.push(frame);
     }
   };
@@ -417,8 +417,11 @@ export async function runLogQLQuery(
 
   let buffer = '';
   let seen = 0;
-  const shouldEmit = () => !!emit;
-  const didEmit = () => {};
+  let lastEmit = 0;
+  const shouldEmit = () => !!emit && (seen % 50 === 0 || performance.now() - lastEmit > 250);
+  const didEmit = () => {
+    lastEmit = performance.now();
+  };
 
   while (true) {
     const { value, done } = await reader.read();

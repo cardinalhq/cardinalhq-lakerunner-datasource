@@ -270,7 +270,7 @@ export class DataSource
     }
     switch (options.type) {
       case SupplementaryQueryType.LogsVolume:
-        return { ...query, refId: `volume-${query.refId}`, queryText: 'volume' };
+        return { ...query, refId: query.refId, queryText: 'volume' };
       case SupplementaryQueryType.LogsSample:
         return { ...query, refId: `sample-${query.refId}`, queryText: 'sample' };
       default:
@@ -427,7 +427,7 @@ export class DataSource
         const merged: DataFrame[] = Object.values(latestByRef).flat();
         subscriber.next({
           data: merged,
-          state: final ? LoadingState.Done : LoadingState.Loading,
+          state: final ? LoadingState.Done : LoadingState.Streaming,
         });
       };
       const scheduleEmit = () => {
