@@ -141,39 +141,6 @@ export const ExtractTagsComponent: React.FC<ExtractTagsComponentProps> = ({
       setPendingFingerprint(null);
     }
   };
-
-  const handleExtractionApply = (newExtractor: any, newTagFilters: any) => {
-    const numericFields: string[] = (newExtractor.selections ?? [])
-      .filter((s: any) => s.dataType === 'number' && s.label && !String(s.label).startsWith('var_'))
-      .map((s: any) => String(s.label))
-      .filter((v: string, i: number, self: string[]) => v && self.indexOf(v) === i);
-
-    const defaultField = numericFields[0] ?? null;
-    setExtractedNumericFields(numericFields);
-
-    const next: MyQuery = {
-      ...query,
-      extractor: {
-        regex: newExtractor.regex,
-        logqlRegex: newExtractor.logqlRegex,
-        fields: newExtractor.fields,
-        selections: newExtractor.selections,
-      },
-      filters: [...(query.filters ?? []).filter((f) => f.tag !== 'chq_fingerprint'), ...(newTagFilters ?? [])],
-      selectedFingerprint: pendingFingerprint ?? undefined,
-      selectedExemplar: selectedExemplar ?? undefined,
-    };
-
-    if (defaultField) {
-      (next as any).valueAs = `field_values:${defaultField}`;
-    }
-
-    onChange(next);
-    onLabelsRefresh();
-    setIsCollapseOpen(true);
-    onRunQuery();
-  };
-
   const collapseContent = (
     <>
       <InlineFieldRow>
@@ -215,13 +182,11 @@ export const ExtractTagsComponent: React.FC<ExtractTagsComponentProps> = ({
         fingerprint={pendingFingerprint ?? ''}
         onClose={() => setIsModalOpen(false)}
         filters={query.filters || []}
-        extractor={query.extractor}
         timeRange={{
           startTime: modalTimeRange?.startTime ?? 0,
           endTime: modalTimeRange?.endTime ?? 0,
         }}
         datasourceId={datasource.id}
-        onExtractionApply={handleExtractionApply}
       />
     </>
   );

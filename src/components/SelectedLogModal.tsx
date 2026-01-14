@@ -33,18 +33,8 @@ interface SelectedLogModalProps {
   isOpen: boolean;
   onClose: () => void;
   filters: any[];
-  extractor?: { regex: string; fields: string[] };
   timeRange: { startTime: number; endTime: number };
   datasourceId: number;
-  onExtractionApply?: (
-    extractor: {
-      regex: string;
-      logqlRegex?: string;
-      fields: string[];
-      selections: LogLineExtractionMatch[];
-    },
-    tagFilters: any[]
-  ) => void;
 }
 
 function getDataTypeOfRecognizer(name: string): 'string' | 'number' {
@@ -81,9 +71,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
   onClose,
   filters,
   timeRange,
-  extractor,
   datasourceId,
-  onExtractionApply,
   fingerprint,
 }) => {
   const theme = useTheme();
@@ -100,8 +88,6 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
     () => (typeof logLine === 'string' ? logLine ?? '' : logLine?.message ?? ''),
     [logLine]
   );
-
-  const query = useMemo(() => (extractor ? { params: { stages: { extractor } } } : undefined), [extractor]);
 
   const selectedExtractions = useMemo(() => extractions.filter((e) => e.userSelected), [extractions]);
   const [selectionFrameKey, setSelectionFrameKey] = useState(Date.now());
@@ -141,43 +127,6 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
     updateSelectionFrameQueryString(message, extList);
     updateExtractionFrameQueryString(message, extList);
   };
-
-  useEffect(() => {
-    const seeded: LogLineExtractionMatch[] = [];
-    const ex = query?.params?.stages?.extractor;
-    if (ex && ex.regex && logMessage) {
-      try {
-        const re = new RegExp(ex.regex, 'g');
-        const matches = Array.from(logMessage.matchAll(re));
-        const selections = (ex as any).selections || [];
-
-        if (matches.length === 1 && matches[0].length - 1 === selections.length) {
-          let line = matches[0][0];
-          let offset = 0;
-          matches[0].slice(1).forEach((m, idx) => {
-            const sel = selections[idx];
-            const position = line.indexOf(m);
-
-            seeded.push({
-              index: position + offset,
-              recognizerName: sel.recognizerName,
-              dataType: sel.dataType,
-              label: sel.label,
-              userSelected: sel.userSelected,
-              sampleValue: m,
-            });
-
-            line = line.substring(position + m.length);
-            offset += position + m.length;
-          });
-          setExtractions(seeded);
-        }
-      } catch {}
-    }
-
-    updateSelectionFrameQueryString(logMessage, seeded);
-    updateExtractionFrameQueryString(logMessage, seeded);
-  }, [logMessage, query]);
 
   useEffect(() => {
     function safeParseMaybeString(data: any) {
@@ -309,30 +258,6 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
     }
 
     try {
-      const tagFilters = [
-        ...(fingerprint
-          ? [
-              {
-                tag: 'chq_fingerprint',
-                op: '=',
-                value: [String(fingerprint)],
-                dataType: 'string',
-                extracted: false,
-                computed: false,
-              },
-            ]
-          : []),
-      ];
-      onExtractionApply?.(
-        {
-          regex: queryExtractorParams.regex,
-          logqlRegex: queryExtractorParams.logqlRegex,
-          fields: queryExtractorParams.fields,
-          selections: queryExtractorParams.selections,
-        },
-        tagFilters
-      );
-
       onClose();
     } catch (err) {
       console.error('[handleExtractClick]', err);

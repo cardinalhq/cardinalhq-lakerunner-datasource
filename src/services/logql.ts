@@ -99,65 +99,8 @@ function planForTarget(target: any) {
 
 const prettyLabel = (s: string) => s.replace(/chq\./g, '');
 
-const getSelectedExtractLabel = (target: any): string | undefined => {
-  const sel = target?.extractor?.selections?.find((s: any) => s?.selected)?.label;
-  if (sel) {
-    return sel;
-  }
-  if (Array.isArray(target?.extractor?.selections) && target.extractor.selections.length === 1) {
-    return target.extractor.selections[0]?.label;
-  }
-  return undefined;
-};
-
-const toRegex = (pattern: string | undefined): RegExp | null => {
-  if (!pattern || typeof pattern !== 'string') {
-    return null;
-  }
-  try {
-    if (pattern.startsWith('/') && pattern.lastIndexOf('/') > 0) {
-      const last = pattern.lastIndexOf('/');
-      return new RegExp(pattern.slice(1, last), pattern.slice(last + 1));
-    }
-    return new RegExp(pattern);
-  } catch {
-    return null;
-  }
-};
-
-const extractFromBody = (body: string, target: any): Record<string, string> => {
-  const out: Record<string, string> = {};
-  const rx = toRegex(target?.extractor?.regex);
-  if (!rx) {
-    return out;
-  }
-  const m = rx.exec(body ?? '');
-  if (!m) {
-    return out;
-  }
-  if ((m as any).groups) {
-    for (const [k, v] of Object.entries((m as any).groups)) {
-      out[k] = String(v ?? '');
-    }
-    return out;
-  }
-  const fields = Array.isArray(target?.extractor?.fields) ? target.extractor.fields : [];
-  for (let i = 0; i < fields.length; i++) {
-    const label = fields[i]?.label;
-    if (!label) {
-      continue;
-    }
-    const val = m[i + 1];
-    if (val != null) {
-      out[label] = String(val);
-    }
-  }
-  return out;
-};
-
 const baseLogLabelsFrom = (tags: Labels, target?: any): Labels => {
   const out: Labels = {};
-
   for (const [k, v] of Object.entries(tags || {})) {
     if (k.startsWith('chq') || k.startsWith('_cardinalhq_')) {
       continue;
@@ -167,24 +110,6 @@ const baseLogLabelsFrom = (tags: Labels, target?: any): Labels => {
     }
     out[k] = v;
   }
-
-  const extractedStruct = tags['__extracted_struct'];
-  if (extractedStruct && typeof extractedStruct === 'object') {
-    const extractorFields = target?.extractor?.fields || [];
-
-    for (const [varKey, value] of Object.entries(extractedStruct)) {
-      if (varKey.startsWith('__var_')) {
-        const varIndex = parseInt(varKey.replace('__var_', ''), 10);
-        const fieldDef = extractorFields[varIndex];
-        if (fieldDef && fieldDef.label) {
-          out[fieldDef.label] = value;
-        }
-      } else {
-        out[varKey] = value;
-      }
-    }
-  }
-
   return out;
 };
 
@@ -479,13 +404,6 @@ export async function runLogQLQuery(
         const id = String(tags['chq_id'] ?? tags['id'] ?? '');
         const fp = String(tags['chq_fingerprint'] ?? tags['chq_id'] ?? tags['id'] ?? '');
         const base = baseLogLabelsFrom(tags, target);
-        const sel = getSelectedExtractLabel(target);
-        if (sel) {
-          const extracted = extractFromBody(body, target);
-          if (Object.prototype.hasOwnProperty.call(extracted, sel)) {
-            base[sel] = extracted[sel];
-          }
-        }
         if (timestamps.length < MAX_INITIAL) {
           timestamps.push(ts);
           bodies.push(body);

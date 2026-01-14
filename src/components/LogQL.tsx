@@ -20,7 +20,6 @@ import { MyQuery, TEXT_OPERATORS } from '../types';
 import { useTags } from '../hooks/useTagKeys';
 import { PrismPromQLEditor } from './PrismEditor';
 import { buildLogQLFromQueryRaw, buildLogQLFromQueryRawForUI } from '../util/LogqlBuilder';
-import ExtractTagsComponent from './ExtractTag';
 import { DataSource } from '../datasource';
 import { toInternalLabel } from '../services/tags';
 import { withHiddenFingerprint } from '../util/buildFinalLogQL';
@@ -258,17 +257,6 @@ export function LogQLTab({
             onFieldsChange={(fields: string[]) =>
               onChangeRef.current({ ...queryRef.current, groupBy: groupByRef.current, builderFields: fields })
             }
-          />
-
-          <ExtractTagsComponent
-            datasource={datasource}
-            query={query}
-            onChange={onChangeRef.current}
-            onRunQuery={onRunQuery}
-            timeRange={effectiveTimeRange}
-            labelsRefreshKey={labelsRefreshKey}
-            onLabelsRefresh={onLabelsRefresh || (() => {})}
-            showCollapseHeader={true}
           />
 
           <div style={{ marginTop: 8 }}>

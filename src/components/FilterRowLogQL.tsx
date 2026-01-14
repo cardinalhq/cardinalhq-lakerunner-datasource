@@ -31,7 +31,7 @@ import { useTagValues } from '../hooks/useTagValues';
 import { buildLogQLExpressions } from '../util/LogqlBuilder';
 import { withHiddenFingerprint } from '../util/buildFinalLogQL';
 import { promqlFromQueryBuilder } from '../util/MetricsBuilder';
-import { toInternalLabel, toUserLabel } from '../services/tags';
+import { toUserLabel } from '../services/tags';
 
 const MESSAGE_TAG = 'log_message';
 const METRIC_NAME_TAG = '_cardinalhq_name';
@@ -59,7 +59,6 @@ export function FilterRow(props: {
   onValueAsDelete?: () => void;
   startTime?: number;
   endTime?: number;
-  extractor?: any;
   selectedFingerprint?: string;
   isLast: boolean;
   mode?: Mode;
@@ -94,7 +93,6 @@ export function FilterRow(props: {
     onValueAsDelete,
     startTime,
     endTime,
-    extractor,
     selectedFingerprint,
     isLast,
     mode = 'logs',
@@ -113,17 +111,8 @@ export function FilterRow(props: {
   const isTraces = mode === 'traces';
   const isLogsLike = isLogs || isTraces;
 
-  const extractedNumericFields = useMemo<string[]>(() => {
-    const sels: any[] = Array.isArray(extractor?.selections) ? extractor.selections : [];
-    const names: string[] = sels
-      .filter((s: any) => s?.dataType === 'number' && s?.label && !String(s.label).startsWith('var_'))
-      .map((s: any) => String(s.label));
-    const unique: string[] = Array.from(new Set<string>(names));
-    return unique.map((n: string) => toInternalLabel(n));
-  }, [extractor]);
-
   const isDurationTag = filter.tag === DURATION_TAG || filter.tag === 'span_duration';
-  const isNumericTag = !!filter.tag && ((isLogs && extractedNumericFields.includes(filter.tag)) || isDurationTag);
+  const isNumericTag = !!filter.tag && isDurationTag;
   const isMessageTag = isLogs && filter.tag === MESSAGE_TAG;
   const isTextOperator = TEXT_OPERATORS.includes(filter.op);
   const isMultiValueOperator = filter.op === 'in' || filter.op === 'not_in';
@@ -206,7 +195,7 @@ export function FilterRow(props: {
         .filter((_, i) => i !== index)
         .filter((f) => f.tag !== MESSAGE_TAG && !TEXT_OPERATORS.includes(f.op));
       const { filtersExpr } = buildLogQLExpressions(
-        { filters: otherFiltersStable, valueAs: undefined, logqlAggregation: undefined, groupBy: [], extractor },
+        { filters: otherFiltersStable, valueAs: undefined, logqlAggregation: undefined, groupBy: [] }, // extractor removed
         '5m'
       );
       let expr = filtersExpr || '{}';
@@ -238,7 +227,6 @@ export function FilterRow(props: {
     isMetrics,
     metricName,
     filters,
-    extractor,
     selectedFingerprint,
     index,
     metricType,
@@ -329,13 +317,7 @@ export function FilterRow(props: {
     }
   }, [isLogs, isTraces, groupBy, aggregation, valueAs, onAggregationChange, onValueAsChange]);
 
-  const valueAsOptionsLogs = useMemo(() => {
-    const fieldOptions = extractedNumericFields.map((f) => ({
-      label: `${f.replace('_cardinalhq_', '')}`,
-      value: `field_values:${f}`,
-    }));
-    return [...VALUE_AS_OPTIONS_LOGS_BASE, ...fieldOptions];
-  }, [extractedNumericFields]);
+  const valueAsOptionsLogs = VALUE_AS_OPTIONS_LOGS_BASE;
 
   const currentValueAsOption = useMemo(() => {
     if (!currentValueAs || isMetrics) {

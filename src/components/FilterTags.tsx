@@ -38,7 +38,6 @@ export function FilterBuilder(props: any) {
     onValueAsDelete,
     startTime,
     endTime,
-    extractor,
     selectedFingerprint,
     mode = 'logs',
     metricName,
@@ -188,7 +187,6 @@ export function FilterBuilder(props: any) {
             onValueAsDelete={onValueAsDelete}
             startTime={startTime}
             endTime={endTime}
-            extractor={extractor}
             selectedFingerprint={selectedFingerprint}
             isLast={true}
             mode={mode}
@@ -219,7 +217,6 @@ export function FilterBuilder(props: any) {
             onValueAsDelete={onValueAsDelete}
             startTime={startTime}
             endTime={endTime}
-            extractor={extractor}
             selectedFingerprint={selectedFingerprint}
             isLast={i === lastIndex}
             mode={mode}
@@ -344,7 +341,6 @@ export function FilterBuilder(props: any) {
           onValueAsDelete={onValueAsDelete}
           startTime={startTime}
           endTime={endTime}
-          extractor={extractor}
           selectedFingerprint={selectedFingerprint}
           isLast={false}
           mode={mode}
@@ -375,7 +371,6 @@ export function FilterBuilder(props: any) {
           onValueAsDelete={onValueAsDelete}
           startTime={startTime}
           endTime={endTime}
-          extractor={extractor}
           selectedFingerprint={selectedFingerprint}
           isLast={i === userFilters.length - 1 && pinnedFilters.length === 0}
           mode={mode}
@@ -414,7 +409,6 @@ export function FilterBuilder(props: any) {
           onValueAsDelete={onValueAsDelete}
           startTime={startTime}
           endTime={endTime}
-          extractor={extractor}
           selectedFingerprint={selectedFingerprint}
           isLast={f.tag === pinnedFilters[pinnedFilters.length - 1]?.tag}
           mode={mode}

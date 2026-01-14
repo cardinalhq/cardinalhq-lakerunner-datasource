@@ -182,12 +182,7 @@ function buildLogQLExpressionsInternal(
   hideHidden = false
 ) {
   const fs = (q.filters ?? []).filter(Boolean);
-  const extractorFields: string[] = ((q as any)?.extractor?.fields ?? [])
-    .map((f: any) => (typeof f === 'string' ? f : f?.name || f?.label))
-    .filter(isNonEmpty);
-
-  const labelFilters = fs.filter((f) => !extractorFields.includes(f.tag));
-  const extractedFilters = fs.filter((f) => extractorFields.includes(f.tag));
+  const labelFilters = fs;
 
   const sel = selector(labelFilters, hideHidden);
   const pipe = pipeline(labelFilters);
@@ -205,124 +200,10 @@ function buildLogQLExpressionsInternal(
     }
   }
 
-  const fieldValuesName =
-    typeof q.valueAs === 'string' && q.valueAs.startsWith('field_values:')
-      ? q.valueAs.slice('field_values:'.length)
-      : '';
-
-  if (isNonEmpty(fieldValuesName)) {
-    const unwrapField = normalizeTag(fieldValuesName);
-    const rawExtractor =
-      (q as any)?.extractor?.logqlRegex ?? (q as any)?.extractor?.regex ?? (q as any)?.extractor?.pattern;
-    const extractorRegexes = Array.isArray(rawExtractor) ? rawExtractor : rawExtractor ? [rawExtractor] : [];
-    extractorRegexes.forEach((re) => {
-      baseExpr += ` | regexp "${esc(re)}" | unwrap ${unwrapField}`;
-    });
-  } else {
-    const rawExtractor =
-      (q as any)?.extractor?.logqlRegex ?? (q as any)?.extractor?.regex ?? (q as any)?.extractor?.pattern;
-    const extractorRegexes = Array.isArray(rawExtractor) ? rawExtractor : rawExtractor ? [rawExtractor] : [];
-    extractorRegexes.forEach((re) => {
-      baseExpr += ` | regexp "${esc(re)}"`;
-    });
-  }
-
-  let extractedStages = '';
-  for (const f of extractedFilters) {
-    const tag = normalizeTag(f.tag);
-    const vals = (f.value ?? []).filter(isNonEmpty);
-    const first = vals[0];
-
-    switch (f.op as Operator) {
-      case '=':
-        if (first) {
-          extractedStages += ` | ${tag}="${esc(first)}"`;
-        }
-        break;
-      case '!=':
-        if (first) {
-          extractedStages += ` | ${tag}!="${esc(first)}"`;
-        }
-        break;
-      case 'in':
-        if (vals.length) {
-          extractedStages += ` | ${tag}=~"^(?:${vals.map(escRegexAlt).join('|')})$"`;
-        }
-        break;
-      case 'not_in':
-        if (vals.length) {
-          extractedStages += ` | ${tag}!~"^(?:${vals.map(escRegexAlt).join('|')})$"`;
-        }
-        break;
-      case 'regex':
-        if (first) {
-          extractedStages += ` | ${tag}=~"${first}"`;
-        }
-        break;
-      case 'not regex':
-        if (first) {
-          extractedStages += ` | ${tag}!~"${first}"`;
-        }
-        break;
-      case 'contains':
-        if (first) {
-          extractedStages += ` | ${tag}=~".*${escRegexAlt(first)}.*"`;
-        }
-        break;
-      case 'not contains':
-        if (first) {
-          extractedStages += ` | ${tag}!~".*${escRegexAlt(first)}.*"`;
-        }
-        break;
-      case 'has':
-        extractedStages += ` | ${tag}!=""`;
-        break;
-      case '<':
-      case '<=':
-      case '>':
-      case '>=':
-        if (first) {
-          const ms = NUMERIC_AFTER_SELECTOR.has(f.tag) ? parseDurationToMs(first) : Number(first);
-          if (ms !== null && Number.isFinite(ms as number)) {
-            extractedStages += ` | ${tag} ${f.op} ${ms}`;
-          }
-        }
-        break;
-    }
-  }
-
-  let preAggExpr = baseExpr + numericStages + extractedStages;
+  let preAggExpr = baseExpr + numericStages;
   let valueExpr = preAggExpr;
   let alreadyAggregated = false;
-
-  if (isNonEmpty(fieldValuesName)) {
-    if (isNonEmpty(q.logqlAggregation)) {
-      switch (q.logqlAggregation) {
-        case 'sum':
-          valueExpr = `sum_over_time(${preAggExpr}[${w}])`;
-          alreadyAggregated = true;
-          break;
-        case 'min':
-          valueExpr = `min_over_time(${preAggExpr}[${w}])`;
-          alreadyAggregated = true;
-          break;
-        case 'max':
-          valueExpr = `max_over_time(${preAggExpr}[${w}])`;
-          alreadyAggregated = true;
-          break;
-        case 'avg':
-          valueExpr = `avg_over_time(${preAggExpr}[${w}])`;
-          alreadyAggregated = true;
-          break;
-        default:
-          valueExpr = `${q.logqlAggregation}(${preAggExpr}[${w}])`;
-          alreadyAggregated = true;
-          break;
-      }
-    } else {
-      valueExpr = `rate_counter(${preAggExpr}[${w}])`;
-    }
-  } else if (q.valueAs === 'rates_per_second' || q.valueAs === 'count_over_time' || q.valueAs === 'last_over_time') {
+  if (q.valueAs === 'rates_per_second' || q.valueAs === 'count_over_time' || q.valueAs === 'last_over_time') {
     valueExpr =
       q.valueAs === 'rates_per_second'
         ? `rate(${preAggExpr}[${w}])`
@@ -338,8 +219,7 @@ function buildLogQLExpressionsInternal(
   if (!alreadyAggregated && isNonEmpty(q.logqlAggregation)) {
     aggExpr = `${q.logqlAggregation}${by}(${valueExpr})`;
   } else if (!isNonEmpty(q.logqlAggregation)) {
-    const isRateOrCountOrLast =
-      q.valueAs === 'rates_per_second' || q.valueAs === 'count_over_time' || isNonEmpty(fieldValuesName);
+    const isRateOrCountOrLast = q.valueAs === 'rates_per_second' || q.valueAs === 'count_over_time'; // || isNonEmpty(fieldValuesName);
     if (gb.length && isRateOrCountOrLast) {
       aggExpr = `sum${by}(${valueExpr})`;
     }
