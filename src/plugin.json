@@ -6,6 +6,7 @@
   "logs": true,
   "tracing": true,
   "backend": true,
+  "alerting": true,
   "executable": "gpx_cardinalhq_datasource",
   "info": {
     "description": "Explore and visualize logs, metrics, and traces stored in your own open-source private datalake",
