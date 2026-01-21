@@ -14,7 +14,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import React, { useMemo } from 'react';
+import React, { useEffect } from 'react';
 import Editor from 'react-simple-code-editor';
 import PrismCore from 'prismjs';
 import 'prismjs/components/prism-clike';
@@ -75,7 +75,7 @@ export function PrismPromQLEditor({
   onChange,
   onBlur,
 }: PrismPromQLEditorProps) {
-  useMemo(() => {
+  useEffect(() => {
     registerPromQL();
     onBeforeEditorMount?.(PrismCore);
   }, [onBeforeEditorMount]);

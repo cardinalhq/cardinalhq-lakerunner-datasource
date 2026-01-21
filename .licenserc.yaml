@@ -5,38 +5,39 @@ header:
     copyright-year: 2025-2026
 
   paths-ignore:
-    - 'bin'
-    - 'dist'
-    - 'node_modules'
-    - '**/*.md'
-    - 'LICENSE'
+    - .claude
     - .gitignore
     - .licenserc.yaml
+    - '.config/**'
+    - '.eslintrc'
+    - '.github/**'
+    - '.nvmrc'
+    - '.prettierrc.js'
+    - '.vscode/**'
+    - '**/*.css'
+    - '**/*.html'
+    - '**/*.json'
+    - '**/*.map'
+    - '**/*.md'
+    - '**/*.scss'
+    - '**/*.svg'
     - '**/*.yaml'
     - '**/*.yml'
-    - '**/*.json'
-    - go.sum
-    - go.mod
     - '**/testdata/**'
-    - .claude
-    - '.config/**'
-    - '.vscode/**'
-    - '.github/**'
-    - 'provisioning/**'
-    - '**/*.css'
-    - '**/*.scss'
-    - '**/*.html'
-    - '.nvmrc'
-    - '.eslintrc'
-    - '.prettierrc.js'
-    - 'jest-setup.js'
-    - 'jest.config.js'
-    - 'tsconfig.json'
-    - 'playwright.config.ts'
+    - 'bin'
     - 'build.sh'
     - 'CHANGELOG.md'
-    - '**/*.svg'
-    - '**/*.map'
+    - 'dist'
+    - 'eslint.config.js'
+    - 'jest-setup.js'
+    - 'jest.config.js'
+    - 'LICENSE'
+    - 'node_modules'
+    - 'playwright.config.ts'
+    - 'provisioning/**'
     - 'src/static/**'
+    - 'tsconfig.json'
+    - go.mod
+    - go.sum
 
   comment: on-failure

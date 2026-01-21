@@ -15,7 +15,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { InlineField, InlineFieldRow, Select, Tab, TabsBar } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Combobox, Tab, TabsBar } from '@grafana/ui';
 import { DataSource } from '../datasource';
 import { Filter, MyQuery, Operator } from '../types';
 import { PrismPromQLEditor } from './PrismEditor';
@@ -172,10 +172,10 @@ export function MetricsTab(props: {
         <>
           <InlineFieldRow>
             <InlineField label="Metric Name">
-              <Select
+              <Combobox
                 placeholder="Select a metric"
                 options={metricOptions.map((m) => ({ label: m.metricName, value: m.metricName }))}
-                value={query.metricName ? { label: query.metricName, value: query.metricName } : null}
+                value={query.metricName ?? null}
                 onChange={(opt) => {
                   const val = opt?.value ?? '';
                   const found = metricOptions.find((m) => m.metricName === val);

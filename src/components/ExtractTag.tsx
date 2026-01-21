@@ -14,8 +14,8 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import { Collapse, Icon, InlineField, InlineFieldRow, LinkButton, Select } from '@grafana/ui';
-import React, { useEffect, useState } from 'react';
+import { Collapse, Combobox, Icon, InlineField, InlineFieldRow, LinkButton } from '@grafana/ui';
+import React, { useMemo, useState } from 'react';
 import { css } from '@emotion/css';
 import { DataSource } from '../datasource';
 import { MyQuery, Operator } from '../types';
@@ -63,22 +63,20 @@ export const ExtractTagsComponent: React.FC<ExtractTagsComponentProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTimeRange, setModalTimeRange] = useState<{ startTime: number; endTime: number } | null>(null);
   const [isCollapseOpen, setIsCollapseOpen] = useState(isCollapsed || !!query.selectedExemplar);
-  const [extractedNumericFields, setExtractedNumericFields] = useState<string[]>([]);
+
+  const extractedNumericFields = useMemo(() => {
+    const selections = query.extractor?.selections ?? [];
+    return selections
+      .filter((s: any) => s.dataType === 'number' && s.label && !s.label.startsWith('var_'))
+      .map((s: any) => s.label)
+      .filter((v: string, i: number, self: string[]) => self.indexOf(v) === i);
+  }, [query.extractor]);
 
   const handleCollapseToggle = () => {
     const newIsOpen = !isCollapseOpen;
     setIsCollapseOpen(newIsOpen);
     onCollapseToggle?.(newIsOpen);
   };
-
-  useEffect(() => {
-    const selections = query.extractor?.selections ?? [];
-    const numericFields = selections
-      .filter((s: any) => s.dataType === 'number' && s.label && !s.label.startsWith('var_'))
-      .map((s: any) => s.label)
-      .filter((v: string, i: number, self: string[]) => self.indexOf(v) === i);
-    setExtractedNumericFields(numericFields);
-  }, [query.extractor]);
 
   const exemplarOptions = React.useMemo(
     () =>
@@ -101,7 +99,6 @@ export const ExtractTagsComponent: React.FC<ExtractTagsComponentProps> = ({
   const resetExtraction = () => {
     const scrubbedFilters = (query.filters ?? []).filter((f) => f.tag !== 'chq_fingerprint');
 
-    setExtractedNumericFields([]);
     setSelectedExemplar(null);
     setPendingFingerprint(null);
     setIsCollapseOpen(false);
@@ -145,10 +142,10 @@ export const ExtractTagsComponent: React.FC<ExtractTagsComponentProps> = ({
     <>
       <InlineFieldRow>
         <InlineField label="Select Message">
-          <Select
+          <Combobox
             placeholder="Select a message"
             options={exemplarOptions}
-            value={selectedId ? { label: selectedExemplar ?? '', value: selectedId } : null}
+            value={selectedId ?? null}
             isClearable
             width={80}
             onChange={handleExemplarChange}
@@ -212,15 +209,12 @@ export const ExtractTagsComponent: React.FC<ExtractTagsComponentProps> = ({
 };
 
 export const useExtractedData = (query: MyQuery): ExtractedData => {
-  const [extractedNumericFields, setExtractedNumericFields] = useState<string[]>([]);
-
-  useEffect(() => {
+  const extractedNumericFields = useMemo(() => {
     const selections = query.extractor?.selections ?? [];
-    const numericFields = selections
+    return selections
       .filter((s: any) => s.dataType === 'number' && s.label && !s.label.startsWith('var_'))
       .map((s: any) => s.label)
       .filter((v: string, i: number, self: string[]) => self.indexOf(v) === i);
-    setExtractedNumericFields(numericFields);
   }, [query.extractor]);
 
   return {

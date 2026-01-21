@@ -15,7 +15,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { InlineField, InlineFieldRow, Select, Combobox, Input, Button, IconButton } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Combobox, Input, Button, IconButton } from '@grafana/ui';
 import { Filter, Operator } from '../types';
 import { FilterRow } from './FilterRowLogQL';
 import { useTags } from '../hooks/useTagKeys';
@@ -54,7 +54,7 @@ export function FilterBuilder(props: any) {
     onFieldsChange,
     disableDefaults = false, // set true for trace-waterfall to hide Error/Duration
   } = props;
-  console.log(groupBy);
+
   const isTraces = mode === 'traces';
 
   const pinnedFilters = useMemo(
@@ -234,18 +234,14 @@ export function FilterBuilder(props: any) {
         {!disableDefaults && (
           <InlineFieldRow style={{ marginBottom: 4, gap: 8, alignItems: 'center' }}>
             <InlineField label="Error">
-              <Select
+              <Combobox
                 width={12}
                 options={[
                   { label: 'Error', value: 'Error' },
                   { label: 'Unset', value: 'Unset' },
                   { label: 'Ok', value: 'Ok' },
                 ]}
-                value={
-                  errorFilter.value?.[0]
-                    ? { label: String(errorFilter.value[0]), value: String(errorFilter.value[0]) }
-                    : null
-                }
+                value={errorFilter.value?.[0] ?? null}
                 placeholder="Select"
                 onChange={(v) =>
                   v?.value
@@ -278,14 +274,14 @@ export function FilterBuilder(props: any) {
                   width={20}
                   placeholder="Enter duration"
                 />
-                <Select
+                <Combobox
                   width={10}
                   options={[
                     { label: 'ms', value: 'ms' },
                     { label: 'sec', value: 's' },
                     { label: 'min', value: 'm' },
                   ]}
-                  value={{ label: durUnit === 'ms' ? 'ms' : durUnit === 's' ? 'sec' : 'min', value: durUnit }}
+                  value={durUnit}
                   onChange={(v) => {
                     const u = (v?.value as 'ms' | 's' | 'm') ?? 'ms';
                     setDurUnit(u);

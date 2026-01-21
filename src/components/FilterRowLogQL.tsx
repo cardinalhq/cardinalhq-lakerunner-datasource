@@ -15,7 +15,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { InlineField, InlineFieldRow, Select, Button, IconButton, Combobox, Input } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Button, IconButton, Combobox, MultiCombobox, Input } from '@grafana/ui';
 import {
   OPERATOR_OPTIONS,
   Operator,
@@ -319,18 +319,6 @@ export function FilterRow(props: {
 
   const valueAsOptionsLogs = VALUE_AS_OPTIONS_LOGS_BASE;
 
-  const currentValueAsOption = useMemo(() => {
-    if (!currentValueAs || isMetrics) {
-      return null;
-    }
-    const asStr = String(currentValueAs);
-    if (asStr.startsWith('field_values:')) {
-      const f = asStr.slice('field_values:'.length);
-      return { label: `${f.replace('_cardinalhq_', '')}`, value: asStr };
-    }
-    return valueAsOptionsLogs.find((o) => o.value === currentValueAs) ?? null;
-  }, [currentValueAs, isMetrics, valueAsOptionsLogs]);
-
   const [durationUnit, setDurationUnit] = useState<'ms' | 's' | 'm'>('ms');
   const [durationDisplay, setDurationDisplay] = useState<string>('');
 
@@ -363,9 +351,9 @@ export function FilterRow(props: {
     <>
       <InlineFieldRow style={{ marginBottom: 4, gap: 0, alignItems: 'center' }}>
         <InlineField>
-          <Select
+          <Combobox
             options={tagOptions}
-            value={filter.tag ? { label: toUserLabel(filter.tag), value: filter.tag } : null}
+            value={filter.tag ?? null}
             onChange={(v) => {
               const nextTag = v?.value ?? '';
               if (isLogs && nextTag === 'log_message') {
@@ -422,17 +410,14 @@ export function FilterRow(props: {
                 placeholder="Enter duration"
                 disabled={!filter.tag}
               />
-              <Select
+              <Combobox
                 width={10}
                 options={[
                   { label: 'ms', value: 'ms' },
                   { label: 'sec', value: 's' },
                   { label: 'min', value: 'm' },
                 ]}
-                value={{
-                  label: durationUnit === 'ms' ? 'ms' : durationUnit === 's' ? 'sec' : 'min',
-                  value: durationUnit,
-                }}
+                value={durationUnit}
                 onChange={(v) => {
                   const u = (v?.value as 'ms' | 's' | 'm') ?? 'ms';
                   setDurationUnit(u);
@@ -450,15 +435,14 @@ export function FilterRow(props: {
               disabled={!filter.tag}
             />
           ) : isMultiValueOperator ? (
-            <Select
+            <MultiCombobox
               options={
                 loadingValues && !tagValues.length
                   ? [{ label: 'Loading...', value: '__loading' }]
                   : tagValues.map((v) => ({ label: v, value: v }))
               }
-              value={(filter.value ?? []).filter((v) => v && v !== '__loading').map((v) => ({ label: v, value: v }))}
-              allowCustomValue
-              isMulti
+              value={(filter.value ?? []).filter((v) => v && v !== '__loading')}
+              createCustomValue
               onChange={(v) => {
                 const selectedValues = v
                   .map((item: { value: string }) => item.value)
@@ -478,13 +462,13 @@ export function FilterRow(props: {
               disabled={!filter.tag}
             />
           ) : (
-            <Select
+            <Combobox
               options={
                 loadingValues && !tagValues.length
                   ? [{ label: 'Loading...', value: '__loading' }]
                   : tagValues.map((v) => ({ label: v, value: v }))
               }
-              value={filter.value?.[0] ? { label: filter.value[0], value: filter.value[0] } : null}
+              value={filter.value?.[0] ?? null}
               createCustomValue
               onChange={(v) => {
                 const val = v?.value ?? '';
@@ -520,14 +504,9 @@ export function FilterRow(props: {
             {(isMetrics || isLogs || isTraces) && (
               <InlineField label="Aggregation">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Select
+                  <Combobox
                     options={isMetrics ? aggOptionsMetrics : AGGREGATE_OPTIONS}
-                    value={
-                      currentAgg
-                        ? (isMetrics ? aggOptionsMetrics : AGGREGATE_OPTIONS).find((o) => o.value === currentAgg) ??
-                          null
-                        : null
-                    }
+                    value={currentAgg ?? null}
                     onChange={(v) => handleAggChange(v?.value as Aggregation)}
                     placeholder="Select aggregation"
                   />
@@ -547,9 +526,9 @@ export function FilterRow(props: {
             {(isLogs || isTraces) && (
               <InlineField label="Value as">
                 <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Select
+                  <Combobox
                     options={valueAsOptionsLogs}
-                    value={currentValueAsOption}
+                    value={currentValueAs ?? null}
                     onChange={(v) => handleValueAsChange(v?.value as ValueAs | string)}
                     placeholder="Select value type"
                   />
@@ -567,12 +546,11 @@ export function FilterRow(props: {
             )}
 
             <InlineField label="Group by">
-              <Select
+              <MultiCombobox
                 placeholder={isMetrics && !metricName ? 'Select metric first' : 'Select tags'}
                 options={tagOptions}
-                value={groupBy?.map((g) => ({ label: toUserLabel(g), value: g })) || []}
-                allowCustomValue
-                isMulti
+                value={groupBy ?? []}
+                createCustomValue
                 onChange={(selectedOptions) => {
                   const newGroupBy = Array.isArray(selectedOptions)
                     ? selectedOptions.map((item: { value: any }) => item.value)
@@ -580,7 +558,7 @@ export function FilterRow(props: {
                   onGroupByChange(newGroupBy);
                 }}
                 disabled={!tagKeysEnabled}
-                menuPlacement="auto"
+                width={30}
               />
             </InlineField>
           </InlineFieldRow>

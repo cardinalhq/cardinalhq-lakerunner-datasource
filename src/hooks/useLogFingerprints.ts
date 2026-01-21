@@ -78,7 +78,6 @@ export function useLogFingerprints(
       schedule(nextDelay);
     };
 
-    setIsLoading(true);
     tick();
 
     const onFocus = () => {

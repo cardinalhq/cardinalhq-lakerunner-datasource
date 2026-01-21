@@ -90,7 +90,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
   );
 
   const selectedExtractions = useMemo(() => extractions.filter((e) => e.userSelected), [extractions]);
-  const [selectionFrameKey, setSelectionFrameKey] = useState(Date.now());
+  const [selectionFrameKey, setSelectionFrameKey] = useState(0);
   const [selectionFrameQueryString, setSelectionFrameQueryString] = useState('');
   const [extractionFrameQueryString, setExtractionFrameQueryString] = useState('');
 
@@ -111,7 +111,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
       queryString += `&selection=${encodeURIComponent(selections)}`;
     }
     setSelectionFrameQueryString(queryString);
-    setSelectionFrameKey(Date.now());
+    setSelectionFrameKey((prev) => prev + 1);
   };
 
   const updateExtractionFrameQueryString = (message: string, extractions: LogLineExtractionMatch[]) => {
