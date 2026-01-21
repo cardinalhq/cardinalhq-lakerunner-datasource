@@ -24,6 +24,17 @@ jobs:
           persist-credentials: false
           fetch-depth: 0  # Fetch all history for changelog generation
 
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            echo "Please update package.json to version $TAG_VERSION before tagging, or delete the tag and re-tag with v$PKG_VERSION"
+            exit 1
+          fi
+          echo "✓ Tag v$TAG_VERSION matches package.json version"
+
       - uses: grafana/plugin-actions/build-plugin@main # zizmor: ignore[unpinned-uses] provided by grafana
         with:
           go-version: '1.25'
