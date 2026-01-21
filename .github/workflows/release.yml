@@ -76,7 +76,7 @@ jobs:
           UNVERSIONED_ZIP="${PLUGIN_ID}.zip"
 
           echo "Downloading $VERSIONED_ZIP from release $GITHUB_REF_NAME..."
-          gh release download "$GITHUB_REF_NAME" --pattern "$VERSIONED_ZIP" --dir .
+          gh release download "$GITHUB_REF_NAME" --pattern "$VERSIONED_ZIP" --dir . --clobber
 
           echo "Creating unversioned copy: $UNVERSIONED_ZIP"
           cp "$VERSIONED_ZIP" "$UNVERSIONED_ZIP"
