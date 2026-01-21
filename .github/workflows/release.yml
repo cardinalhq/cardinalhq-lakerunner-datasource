@@ -81,8 +81,22 @@ jobs:
           echo "Creating unversioned copy: $UNVERSIONED_ZIP"
           cp "$VERSIONED_ZIP" "$UNVERSIONED_ZIP"
 
-          echo "Uploading $UNVERSIONED_ZIP to release..."
-          gh release upload "$GITHUB_REF_NAME" "$UNVERSIONED_ZIP" --clobber
+      - name: Upload unversioned zip to lakerunner-datasource repo
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          UNVERSIONED_ZIP="${PLUGIN_ID}.zip"
+          REPO="cardinalhq/cardinalhq-lakerunner-datasource"
+
+          # Create release if it doesn't exist
+          if ! gh release view "v$VERSION" --repo "$REPO" &>/dev/null; then
+            echo "Creating release v$VERSION in $REPO..."
+            gh release create "v$VERSION" --repo "$REPO" --title "v$VERSION" --notes "Release v$VERSION"
+          fi
+
+          echo "Uploading $UNVERSIONED_ZIP to $REPO release v$VERSION..."
+          gh release upload "v$VERSION" "$UNVERSIONED_ZIP" --clobber --repo "$REPO"
 
       - name: Update release
         env:
