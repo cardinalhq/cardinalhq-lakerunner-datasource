@@ -16,15 +16,79 @@ jobs:
       contents: write
       attestations: write
     runs-on: ubuntu-latest
+    env:
+      PLUGIN_ID: cardinalhq-lakerunner-datasource
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0  # Fetch all history for changelog generation
 
       - uses: grafana/plugin-actions/build-plugin@main # zizmor: ignore[unpinned-uses] provided by grafana
         with:
           go-version: '1.25'
           node-version: '22'
           policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
-          # attestation: true
-          # use_changelog_generator: true
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Check if this is an RC release
+          if [[ "$VERSION" == *"-rc"* ]] || [[ "$VERSION" == *"-RC"* ]]; then
+            echo "is_rc=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_rc=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, using all commits"
+            git log --pretty=format:"- %s (%h)" --no-merges | head -50 > changelog.txt
+          else
+            echo "Generating changelog from $PREV_TAG to $GITHUB_REF_NAME"
+            git log --pretty=format:"- %s (%h)" --no-merges "$PREV_TAG".."$GITHUB_REF_NAME" > changelog.txt
+          fi
+
+      - name: Download versioned artifact and create unversioned copy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          VERSIONED_ZIP="${PLUGIN_ID}-${VERSION}.zip"
+          UNVERSIONED_ZIP="${PLUGIN_ID}.zip"
+
+          echo "Downloading $VERSIONED_ZIP from release $GITHUB_REF_NAME..."
+          gh release download "$GITHUB_REF_NAME" --pattern "$VERSIONED_ZIP" --dir .
+
+          echo "Creating unversioned copy: $UNVERSIONED_ZIP"
+          cp "$VERSIONED_ZIP" "$UNVERSIONED_ZIP"
+
+          echo "Uploading $UNVERSIONED_ZIP to release..."
+          gh release upload "$GITHUB_REF_NAME" "$UNVERSIONED_ZIP" --clobber
+
+      - name: Update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_RC: ${{ steps.get_version.outputs.is_rc }}
+        run: |
+          # Build the release notes file
+          {
+            echo "## Changes since last release"
+            echo ""
+            cat changelog.txt
+          } > release_notes.md
+
+          if [ "$IS_RC" = "true" ]; then
+            echo "RC release detected, keeping as draft"
+            gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md
+          else
+            echo "Production release detected, publishing"
+            gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md --draft=false
+          fi

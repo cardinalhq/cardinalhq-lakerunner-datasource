@@ -28,6 +28,7 @@ import (
 	"github.com/cardinalhq/cardinalhq-datasource/pkg/models"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 )
 
@@ -55,13 +56,19 @@ func (d *Datasource) QueryData(ctx context.Context, req *backend.QueryDataReques
 }
 
 type queryModel struct {
-	Mode        string     `json:"mode"`
-	MetricName  string     `json:"metricName"`
-	MetricType  string     `json:"metricType"`
-	Aggregation string     `json:"aggregation"`
-	GroupBy     []string   `json:"groupBy"`
-	Filters     []uiFilter `json:"filters"`
-	QueryText   string     `json:"queryText"`
+	Mode             string     `json:"mode"`
+	MetricName       string     `json:"metricName"`
+	MetricType       string     `json:"metricType"`
+	Aggregation      string     `json:"aggregation"`
+	GroupBy          []string   `json:"groupBy"`
+	Filters          []uiFilter `json:"filters"`
+	QueryText        string     `json:"queryText"`
+	PromqlOutput     string     `json:"promqlOutput"`
+	ValueAs          string     `json:"valueAs"`
+	LogqlOutput      string     `json:"logqlOutput"`
+	LogqlAggregation string     `json:"logqlAggregation"`
+	LogqlBuilderExp  string     `json:"logqlBuilderExp"`
+	LogqlSubTab      string     `json:"logqlSubTab"`
 }
 
 type uiFilter struct {
@@ -101,6 +108,305 @@ func cleanFilters(in []uiFilter) []uiFilter {
 		}
 	}
 	return out
+}
+
+// escapePromQLValue escapes a string value for use in a PromQL label matcher
+func escapePromQLValue(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
+}
+
+// isValidPromQLMetricName checks if a metric name is valid PromQL identifier
+// Valid names match: [a-zA-Z_:][a-zA-Z0-9_:]*
+func isValidPromQLMetricName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i, r := range name {
+		if i == 0 {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '_' || r == ':') {
+				return false
+			}
+		} else {
+			if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == ':') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// buildPromQL constructs a PromQL query from the query builder model
+func buildPromQL(qm queryModel) string {
+	metricName := strings.TrimSpace(qm.MetricName)
+	agg := strings.TrimSpace(qm.Aggregation)
+	valueAs := strings.TrimSpace(qm.ValueAs)
+
+	// Build filter clauses
+	var clauses []string
+	for _, f := range qm.Filters {
+		tag := strings.TrimSpace(f.Tag)
+		if tag == "" {
+			continue
+		}
+		// Get first non-empty value
+		var val string
+		for _, v := range f.Value {
+			if strings.TrimSpace(v) != "" {
+				val = strings.TrimSpace(v)
+				break
+			}
+		}
+		if val == "" && f.Op != "!=" && f.Op != "neq" {
+			continue
+		}
+
+		// Normalize the label name (quote if contains dots)
+		label := tag
+		if strings.Contains(tag, ".") {
+			label = `"` + tag + `"`
+		}
+
+		escaped := escapePromQLValue(val)
+		switch f.Op {
+		case "=", "eq":
+			clauses = append(clauses, fmt.Sprintf(`%s="%s"`, label, escaped))
+		case "!=", "neq":
+			clauses = append(clauses, fmt.Sprintf(`%s!="%s"`, label, escaped))
+		case "regex", "=~":
+			clauses = append(clauses, fmt.Sprintf(`%s=~"%s"`, label, escaped))
+		case "not regex", "!~", "not_regex":
+			clauses = append(clauses, fmt.Sprintf(`%s!~"%s"`, label, escaped))
+		case "in":
+			// Build regex alternation for "in"
+			var vals []string
+			for _, v := range f.Value {
+				if strings.TrimSpace(v) != "" {
+					vals = append(vals, escapePromQLValue(strings.TrimSpace(v)))
+				}
+			}
+			if len(vals) > 0 {
+				clauses = append(clauses, fmt.Sprintf(`%s=~"%s"`, label, strings.Join(vals, "|")))
+			}
+		case "not_in":
+			var vals []string
+			for _, v := range f.Value {
+				if strings.TrimSpace(v) != "" {
+					vals = append(vals, escapePromQLValue(strings.TrimSpace(v)))
+				}
+			}
+			if len(vals) > 0 {
+				clauses = append(clauses, fmt.Sprintf(`%s!~"%s"`, label, strings.Join(vals, "|")))
+			}
+		case "contains":
+			clauses = append(clauses, fmt.Sprintf(`%s=~".*%s.*"`, label, escaped))
+		case "not contains", "not_contains":
+			clauses = append(clauses, fmt.Sprintf(`%s!~".*%s.*"`, label, escaped))
+		default:
+			clauses = append(clauses, fmt.Sprintf(`%s="%s"`, label, escaped))
+		}
+	}
+
+	// Build selector
+	var selector string
+	if metricName != "" {
+		// Check if metric name is a valid PromQL identifier
+		// If not (e.g., contains dots like k8s.cpu.total), use __name__ matcher
+		if isValidPromQLMetricName(metricName) {
+			if len(clauses) > 0 {
+				selector = fmt.Sprintf("%s{%s}", metricName, strings.Join(clauses, ", "))
+			} else {
+				selector = metricName
+			}
+		} else {
+			// Use __name__ matcher for invalid metric names (e.g., with dots)
+			nameClause := fmt.Sprintf(`__name__="%s"`, escapePromQLValue(metricName))
+			allClauses := append([]string{nameClause}, clauses...)
+			selector = fmt.Sprintf("{%s}", strings.Join(allClauses, ", "))
+		}
+	} else if len(clauses) > 0 {
+		selector = fmt.Sprintf("{%s}", strings.Join(clauses, ", "))
+	} else {
+		return ""
+	}
+
+	// Apply valueAs transformations
+	inner := selector
+	switch valueAs {
+	case "rates_per_second":
+		inner = fmt.Sprintf("rate(%s[5m])", selector)
+	case "count_over_time":
+		inner = fmt.Sprintf("count_over_time(%s[5m])", selector)
+	}
+
+	// Apply aggregation
+	if agg == "" {
+		return inner
+	}
+
+	groupBys := make([]string, 0, len(qm.GroupBy))
+	for _, g := range qm.GroupBy {
+		gt := strings.TrimSpace(g)
+		if gt != "" {
+			if strings.Contains(gt, ".") {
+				groupBys = append(groupBys, `"`+gt+`"`)
+			} else {
+				groupBys = append(groupBys, gt)
+			}
+		}
+	}
+
+	if len(groupBys) > 0 {
+		return fmt.Sprintf("%s by (%s)(%s)", agg, strings.Join(groupBys, ","), inner)
+	}
+	return fmt.Sprintf("%s(%s)", agg, inner)
+}
+
+// normalizeLogTag converts tag names to LogQL format (dots become underscores)
+func normalizeLogTag(tag string) string {
+	return strings.ReplaceAll(tag, ".", "_")
+}
+
+// buildLogQL constructs a LogQL query from the query builder model
+func buildLogQL(qm queryModel, window string) string {
+	if window == "" {
+		window = "5m"
+	}
+
+	// Build label matchers for the selector
+	var labelMatchers []string
+	var lineFilters []string
+
+	for _, f := range qm.Filters {
+		tag := strings.TrimSpace(f.Tag)
+		if tag == "" {
+			continue
+		}
+
+		// Get values
+		var vals []string
+		for _, v := range f.Value {
+			if strings.TrimSpace(v) != "" {
+				vals = append(vals, strings.TrimSpace(v))
+			}
+		}
+		if len(vals) == 0 && f.Op != "!=" && f.Op != "neq" && f.Op != "has" {
+			continue
+		}
+
+		first := ""
+		if len(vals) > 0 {
+			first = vals[0]
+		}
+
+		// Handle log_message as line filter instead of label matcher
+		if tag == "log_message" || tag == "message" {
+			if first != "" {
+				switch f.Op {
+				case "contains":
+					lineFilters = append(lineFilters, fmt.Sprintf(`|= "%s"`, escapePromQLValue(first)))
+				case "not contains", "not_contains":
+					lineFilters = append(lineFilters, fmt.Sprintf(`!= "%s"`, escapePromQLValue(first)))
+				case "regex", "=~":
+					lineFilters = append(lineFilters, fmt.Sprintf(`|~ "%s"`, escapePromQLValue(first)))
+				case "not regex", "not_regex", "!~":
+					lineFilters = append(lineFilters, fmt.Sprintf(`!~ "%s"`, escapePromQLValue(first)))
+				}
+			}
+			continue
+		}
+
+		// Normalize tag name for LogQL
+		safeTag := normalizeLogTag(tag)
+
+		switch f.Op {
+		case "=", "eq":
+			labelMatchers = append(labelMatchers, fmt.Sprintf(`%s="%s"`, safeTag, escapePromQLValue(first)))
+		case "!=", "neq":
+			labelMatchers = append(labelMatchers, fmt.Sprintf(`%s!="%s"`, safeTag, escapePromQLValue(first)))
+		case "in":
+			if len(vals) > 0 {
+				escaped := make([]string, len(vals))
+				for i, v := range vals {
+					escaped[i] = escapePromQLValue(v)
+				}
+				labelMatchers = append(labelMatchers, fmt.Sprintf(`%s=~"^(?:%s)$"`, safeTag, strings.Join(escaped, "|")))
+			}
+		case "not_in":
+			if len(vals) > 0 {
+				escaped := make([]string, len(vals))
+				for i, v := range vals {
+					escaped[i] = escapePromQLValue(v)
+				}
+				labelMatchers = append(labelMatchers, fmt.Sprintf(`%s!~"^(?:%s)$"`, safeTag, strings.Join(escaped, "|")))
+			}
+		case "contains":
+			labelMatchers = append(labelMatchers, fmt.Sprintf(`%s=~"%s"`, safeTag, escapePromQLValue(first)))
+		case "not contains", "not_contains":
+			labelMatchers = append(labelMatchers, fmt.Sprintf(`%s!~"%s"`, safeTag, escapePromQLValue(first)))
+		case "regex", "=~":
+			labelMatchers = append(labelMatchers, fmt.Sprintf(`%s=~"%s"`, safeTag, first)) // Don't escape regex
+		case "not regex", "not_regex", "!~":
+			labelMatchers = append(labelMatchers, fmt.Sprintf(`%s!~"%s"`, safeTag, first))
+		case "has":
+			labelMatchers = append(labelMatchers, fmt.Sprintf(`%s!=""`, safeTag))
+		default:
+			if first != "" {
+				labelMatchers = append(labelMatchers, fmt.Sprintf(`%s="%s"`, safeTag, escapePromQLValue(first)))
+			}
+		}
+	}
+
+	// Build selector
+	selector := "{" + strings.Join(labelMatchers, ", ") + "}"
+
+	// Add line filters (pipeline)
+	baseExpr := selector
+	if len(lineFilters) > 0 {
+		baseExpr = selector + " " + strings.Join(lineFilters, " ")
+	}
+
+	// Apply valueAs transformation
+	valueExpr := baseExpr
+	switch qm.ValueAs {
+	case "rates_per_second":
+		valueExpr = fmt.Sprintf("rate(%s[%s])", baseExpr, window)
+	case "count_over_time":
+		valueExpr = fmt.Sprintf("count_over_time(%s[%s])", baseExpr, window)
+	case "last_over_time":
+		valueExpr = fmt.Sprintf("last_over_time(%s[%s])", baseExpr, window)
+	}
+
+	// Build group by clause
+	groupBys := make([]string, 0, len(qm.GroupBy))
+	for _, g := range qm.GroupBy {
+		gt := strings.TrimSpace(g)
+		if gt != "" {
+			groupBys = append(groupBys, normalizeLogTag(gt))
+		}
+	}
+	byClause := ""
+	if len(groupBys) > 0 {
+		byClause = fmt.Sprintf(" by (%s)", strings.Join(groupBys, ","))
+	}
+
+	// Apply aggregation
+	agg := strings.TrimSpace(qm.LogqlAggregation)
+	if agg == "" {
+		agg = strings.TrimSpace(qm.Aggregation) // Fallback to general aggregation
+	}
+
+	if agg != "" {
+		return fmt.Sprintf("%s%s(%s)", agg, byClause, valueExpr)
+	}
+
+	// If no aggregation but has groupBy and valueAs, default to sum
+	if len(groupBys) > 0 && (qm.ValueAs == "rates_per_second" || qm.ValueAs == "count_over_time") {
+		return fmt.Sprintf("sum%s(%s)", byClause, valueExpr)
+	}
+
+	return valueExpr
 }
 
 func convertOpTS(op string) string {
@@ -183,20 +489,368 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	fullURL := strings.TrimRight(config.JsonData.CustomPath, "/")
 
 	isMetrics := strings.EqualFold(qm.Mode, "metrics")
+	isLogs := strings.EqualFold(qm.Mode, "logs")
 	qt := strings.TrimSpace(qm.QueryText)
-	isLogsVolume := !isMetrics && (strings.EqualFold(qt, "volume") || qt == "")
 
-	filters := cleanFilters(qm.Filters)
+	// Debug: log the raw query JSON and parsed fields
+	log.DefaultLogger.Debug("Query model received",
+		"rawJSON", string(query.JSON),
+		"mode", qm.Mode,
+		"queryText", qm.QueryText,
+		"logqlAggregation", qm.LogqlAggregation,
+		"valueAs", qm.ValueAs,
+		"logqlOutput", qm.LogqlOutput,
+		"logqlBuilderExp", qm.LogqlBuilderExp,
+		"aggregation", qm.Aggregation,
+		"metricName", qm.MetricName,
+		"filters", fmt.Sprintf("%+v", qm.Filters),
+	)
 
-	if isMetrics && strings.TrimSpace(qm.MetricName) != "" {
-		injected := uiFilter{
-			Tag:      "_cardinalhq_name",
-			Op:       "=",
-			Value:    []string{qm.MetricName},
-			DataType: "string",
+	// Detect if this is a log alert query
+	// Has explicit aggregation OR has logqlBuilderExp (which we'll wrap in count_over_time for alerting)
+	hasLogAggregation := strings.TrimSpace(qm.LogqlAggregation) != "" ||
+		strings.TrimSpace(qm.ValueAs) != "" ||
+		strings.TrimSpace(qm.LogqlOutput) != ""
+	hasLogqlBuilder := strings.TrimSpace(qm.LogqlBuilderExp) != ""
+	// For alerting: any logs query with filters or logqlBuilderExp that's not explicitly "volume"
+	isLogAlert := isLogs && (hasLogAggregation || hasLogqlBuilder) && !strings.EqualFold(qt, "volume")
+	isLogsVolume := !isMetrics && !isLogAlert && (strings.EqualFold(qt, "volume") || qt == "")
+
+	log.DefaultLogger.Debug("Query routing decision",
+		"isMetrics", isMetrics,
+		"isLogs", isLogs,
+		"hasLogAggregation", hasLogAggregation,
+		"hasLogqlBuilder", hasLogqlBuilder,
+		"isLogAlert", isLogAlert,
+		"isLogsVolume", isLogsVolume,
+	)
+
+	// For metrics queries, use PromQL format like the frontend does
+	if isMetrics {
+		// Use promqlOutput if provided, otherwise build from query model
+		promql := strings.TrimSpace(qm.PromqlOutput)
+		if promql == "" {
+			promql = buildPromQL(qm)
 		}
-		filters = append([]uiFilter{injected}, filters...)
+		if promql == "" {
+			return backend.ErrDataResponse(backend.StatusBadRequest, "No metric query specified")
+		}
+
+		body := map[string]interface{}{
+			"s": fmt.Sprintf("%d", startTime),
+			"e": fmt.Sprintf("%d", endTime),
+			"q": promql,
+		}
+		bodyBytes, _ := json.Marshal(body)
+		endpoint := fullURL + "/api/v1/metrics/query"
+		log.DefaultLogger.Debug("Making metrics request", "endpoint", endpoint, "promql", promql, "body", string(bodyBytes))
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
+		if err != nil {
+			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
+		}
+		httpReq.Header.Set("x-cardinalhq-api-key", config.Secrets.ApiKey)
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Accept", "text/event-stream")
+
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to execute request: %v", err))
+		}
+		defer resp.Body.Close()
+
+		log.DefaultLogger.Debug("SSE response received", "status", resp.StatusCode, "contentType", resp.Header.Get("Content-Type"))
+
+		// Check for non-2xx response status
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes)))
+		}
+
+		// Parse SSE response for metrics (expects "result" type messages like frontend)
+		type seriesData struct {
+			timestamps []int64
+			values     []float64
+		}
+		frameData := map[string]*seriesData{}
+
+		reader := resp.Body
+		buffer := ""
+		buf := make([]byte, 32*1024)
+		sseSamples := 0
+		const sseSampleMax = 5
+
+		for {
+			n, rerr := reader.Read(buf)
+			if n > 0 {
+				buffer += string(buf[:n])
+				lines := strings.Split(buffer, "\n")
+				buffer = lines[len(lines)-1]
+				lines = lines[:len(lines)-1]
+
+				for _, rawLine := range lines {
+					line := strings.TrimSpace(rawLine)
+					if !strings.HasPrefix(line, "data:") {
+						continue
+					}
+					msgStr := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+
+					var parsed struct {
+						Type string `json:"type"`
+						Data struct {
+							Timestamp json.Number `json:"timestamp"`
+							Value     json.Number `json:"value"`
+							Label     string      `json:"label"`
+						} `json:"data"`
+					}
+					if err := json.Unmarshal([]byte(msgStr), &parsed); err != nil {
+						continue
+					}
+
+					if sseSamples < sseSampleMax {
+						log.DefaultLogger.Debug("SSE message received", "type", parsed.Type, "sample", sseSamples, "raw", msgStr)
+						sseSamples++
+					}
+
+					// Handle "result" type (like frontend) and "timeseries" type (legacy)
+					if parsed.Type != "result" && parsed.Type != "timeseries" {
+						continue
+					}
+
+					ts, err := parsed.Data.Timestamp.Int64()
+					if err != nil {
+						continue
+					}
+					val, err := parsed.Data.Value.Float64()
+					if err != nil {
+						continue
+					}
+
+					label := parsed.Data.Label
+					if label == "" {
+						label = qm.MetricName
+					}
+					if label == "" {
+						label = "value"
+					}
+
+					if frameData[label] == nil {
+						frameData[label] = &seriesData{}
+					}
+					frameData[label].timestamps = append(frameData[label].timestamps, ts)
+					frameData[label].values = append(frameData[label].values, val)
+				}
+			}
+
+			if rerr != nil {
+				if rerr == io.EOF {
+					log.DefaultLogger.Debug("SSE stream EOF", "seriesCount", len(frameData), "sseSamples", sseSamples)
+					break
+				}
+				return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Error reading stream: %v", rerr))
+			}
+		}
+
+		// Build data frames from collected series
+		for label, sd := range frameData {
+			// Sort by timestamp
+			type pt struct {
+				t int64
+				v float64
+			}
+			pts := make([]pt, len(sd.timestamps))
+			for i := range sd.timestamps {
+				pts[i] = pt{t: sd.timestamps[i], v: sd.values[i]}
+			}
+			sort.Slice(pts, func(i, j int) bool { return pts[i].t < pts[j].t })
+
+			times := make([]time.Time, len(pts))
+			vals := make([]float64, len(pts))
+			for i, p := range pts {
+				times[i] = time.UnixMilli(p.t)
+				vals[i] = p.v
+			}
+
+			timeField := data.NewField("Time", nil, times)
+			valueField := data.NewField("Value", nil, vals)
+			valueField.Config = &data.FieldConfig{DisplayNameFromDS: label}
+
+			frame := data.NewFrame(query.RefID, timeField, valueField)
+			frame.RefID = query.RefID
+			frame.Meta = &data.FrameMeta{PreferredVisualization: data.VisTypeGraph}
+			response.Frames = append(response.Frames, frame)
+		}
+
+		return response
 	}
+
+	// For log alert queries, use LogQL format like the frontend does
+	if isLogAlert {
+		// Use logqlOutput if provided, otherwise use logqlBuilderExp, otherwise build from query model
+		logql := strings.TrimSpace(qm.LogqlOutput)
+		if logql == "" {
+			logql = buildLogQL(qm, "5m")
+		}
+		// If buildLogQL returns empty/just selector, use logqlBuilderExp
+		if logql == "" || logql == "{}" {
+			logql = strings.TrimSpace(qm.LogqlBuilderExp)
+		}
+		if logql == "" || logql == "{}" {
+			return backend.ErrDataResponse(backend.StatusBadRequest, "No log query specified")
+		}
+		// Check if the query is just a stream selector (no aggregation function)
+		// For alerting, we need numeric timeseries data, so wrap in count_over_time
+		isJustSelector := strings.HasPrefix(logql, "{") && !strings.Contains(logql, "(")
+		if isJustSelector {
+			logql = fmt.Sprintf("sum(count_over_time(%s[5m]))", logql)
+		}
+		log.DefaultLogger.Debug("Log alert query built", "logql", logql, "wasJustSelector", isJustSelector)
+
+		body := map[string]interface{}{
+			"s": fmt.Sprintf("%d", startTime),
+			"e": fmt.Sprintf("%d", endTime),
+			"q": logql,
+		}
+		bodyBytes, _ := json.Marshal(body)
+		endpoint := fullURL + "/api/v1/logs/query"
+		log.DefaultLogger.Debug("Making logs alert request", "endpoint", endpoint, "logql", logql, "body", string(bodyBytes))
+		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
+		if err != nil {
+			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
+		}
+		httpReq.Header.Set("x-cardinalhq-api-key", config.Secrets.ApiKey)
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Accept", "text/event-stream")
+
+		resp, err := http.DefaultClient.Do(httpReq)
+		if err != nil {
+			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to execute request: %v", err))
+		}
+		defer resp.Body.Close()
+
+		log.DefaultLogger.Debug("SSE response received", "status", resp.StatusCode, "contentType", resp.Header.Get("Content-Type"))
+
+		// Check for non-2xx response status
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			bodyBytes, _ := io.ReadAll(resp.Body)
+			return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("API request failed with status %d: %s", resp.StatusCode, string(bodyBytes)))
+		}
+
+		// Parse SSE response for logs (expects "result" type messages like frontend)
+		type seriesData struct {
+			timestamps []int64
+			values     []float64
+		}
+		frameData := map[string]*seriesData{}
+
+		reader := resp.Body
+		buffer := ""
+		buf := make([]byte, 32*1024)
+		sseSamples := 0
+		const sseSampleMax = 5
+
+		for {
+			n, rerr := reader.Read(buf)
+			if n > 0 {
+				buffer += string(buf[:n])
+				lines := strings.Split(buffer, "\n")
+				buffer = lines[len(lines)-1]
+				lines = lines[:len(lines)-1]
+
+				for _, rawLine := range lines {
+					line := strings.TrimSpace(rawLine)
+					if !strings.HasPrefix(line, "data:") {
+						continue
+					}
+					msgStr := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+
+					var parsed struct {
+						Type string `json:"type"`
+						Data struct {
+							Timestamp json.Number `json:"timestamp"`
+							Value     json.Number `json:"value"`
+							Label     string      `json:"label"`
+						} `json:"data"`
+					}
+					if err := json.Unmarshal([]byte(msgStr), &parsed); err != nil {
+						continue
+					}
+
+					if sseSamples < sseSampleMax {
+						log.DefaultLogger.Debug("SSE message received", "type", parsed.Type, "sample", sseSamples, "raw", msgStr)
+						sseSamples++
+					}
+
+					// Handle "result" type messages
+					if parsed.Type != "result" {
+						continue
+					}
+
+					ts, err := parsed.Data.Timestamp.Int64()
+					if err != nil {
+						continue
+					}
+					val, err := parsed.Data.Value.Float64()
+					if err != nil {
+						continue
+					}
+
+					label := parsed.Data.Label
+					if label == "" {
+						label = "logs"
+					}
+
+					if frameData[label] == nil {
+						frameData[label] = &seriesData{}
+					}
+					frameData[label].timestamps = append(frameData[label].timestamps, ts)
+					frameData[label].values = append(frameData[label].values, val)
+				}
+			}
+
+			if rerr != nil {
+				if rerr == io.EOF {
+					log.DefaultLogger.Debug("SSE stream EOF", "seriesCount", len(frameData), "sseSamples", sseSamples)
+					break
+				}
+				return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Error reading stream: %v", rerr))
+			}
+		}
+
+		// Build data frames from collected series
+		for label, sd := range frameData {
+			// Sort by timestamp
+			type pt struct {
+				t int64
+				v float64
+			}
+			pts := make([]pt, len(sd.timestamps))
+			for i := range sd.timestamps {
+				pts[i] = pt{t: sd.timestamps[i], v: sd.values[i]}
+			}
+			sort.Slice(pts, func(i, j int) bool { return pts[i].t < pts[j].t })
+
+			times := make([]time.Time, len(pts))
+			vals := make([]float64, len(pts))
+			for i, p := range pts {
+				times[i] = time.UnixMilli(p.t)
+				vals[i] = p.v
+			}
+
+			timeField := data.NewField("Time", nil, times)
+			valueField := data.NewField("Value", nil, vals)
+			valueField.Config = &data.FieldConfig{DisplayNameFromDS: label}
+
+			frame := data.NewFrame(query.RefID, timeField, valueField)
+			frame.RefID = query.RefID
+			frame.Meta = &data.FrameMeta{PreferredVisualization: data.VisTypeGraph}
+			response.Frames = append(response.Frames, frame)
+		}
+
+		return response
+	}
+
+	// For logs volume queries, keep the existing baseExpressions format
+	filters := cleanFilters(qm.Filters)
 
 	nested := buildNestedFilterTS(filters)
 
@@ -241,13 +895,8 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		"groupBys":     groupBys,
 		"bucketSizeMs": bucketSizeMs,
 	}
-	dataset := "metrics"
-	if isLogsVolume {
-		dataset = "logs"
-		chart["type"] = "count"
-	} else {
-		chart["type"] = "count"
-	}
+	dataset := "logs"
+	chart["type"] = "count"
 
 	expr := map[string]interface{}{
 		"dataset":       dataset,
@@ -255,13 +904,12 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		"filter":        nested,
 		"chart":         chart,
 	}
-	if strings.TrimSpace(qm.MetricType) != "" {
-		expr["metricType"] = qm.MetricType
-	}
 
 	body := map[string]interface{}{"baseExpressions": map[string]interface{}{"a": expr}}
 	bodyBytes, _ := json.Marshal(body)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, bytes.NewReader(bodyBytes))
+	endpoint := fullURL + "/api/v1/logs/query"
+	log.DefaultLogger.Debug("Making logs volume request", "endpoint", endpoint, "body", string(bodyBytes))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
 	}
@@ -274,6 +922,8 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Failed to create request: %v", err))
 	}
 	defer resp.Body.Close()
+
+	log.DefaultLogger.Debug("SSE response received", "status", resp.StatusCode, "contentType", resp.Header.Get("Content-Type"))
 
 	reader := resp.Body
 	buffer := ""
@@ -313,14 +963,17 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 				}
 
 				if sseSamples < sseSampleMax {
+					log.DefaultLogger.Debug("SSE message received", "type", outer.Type, "sample", sseSamples, "raw", msgStr)
 					sseSamples++
 				}
 
 				if outer.Type == "done" {
+					log.DefaultLogger.Debug("SSE done message received")
 					doneReceived = true
 					continue
 				}
 				if outer.Type != "timeseries" {
+					log.DefaultLogger.Debug("SSE skipping non-timeseries message", "type", outer.Type)
 					continue
 				}
 
@@ -375,6 +1028,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 
 		if err != nil {
 			if err == io.EOF {
+				log.DefaultLogger.Debug("SSE stream EOF", "doneReceived", doneReceived, "framesCount", len(response.Frames), "seriesCount", len(series), "sseSamples", sseSamples)
 				if doneReceived || len(response.Frames) > 0 {
 					return response
 				}
