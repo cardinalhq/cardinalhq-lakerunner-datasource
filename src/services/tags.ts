@@ -54,8 +54,9 @@ export async function fetchTags(opts: {
   signal?: AbortSignal;
   setIsWaiting?: (v: boolean) => void;
   metricName?: string;
+  expr?: string; // Optional query expression for scoping available tags
 }): Promise<string[]> {
-  const { datasourceId, startTime, endTime, signal, setIsWaiting, mode = 'logs', metricName } = opts;
+  const { datasourceId, startTime, endTime, signal, setIsWaiting, mode = 'logs', metricName, expr } = opts;
 
   const s = String(startTime ?? Date.now() - 5 * 60_000);
   const e = String(endTime ?? Date.now());
@@ -67,6 +68,10 @@ export async function fetchTags(opts: {
     const body: Record<string, any> = { s, e };
     if (mode === 'metrics' && metricName) {
       body.metric = metricName;
+    }
+    // Add query expression for scoping tags (all modes support this)
+    if (expr) {
+      body.q = expr;
     }
 
     const res = await fetch(`/api/datasources/${datasourceId}/resources/proxy-promql`, {

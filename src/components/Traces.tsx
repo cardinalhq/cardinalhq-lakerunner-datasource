@@ -21,7 +21,7 @@ import { DataSource } from '../datasource';
 import { useTags } from '../hooks/useTagKeys';
 import { FilterBuilder } from './FilterTags';
 import { PrismPromQLEditor } from './PrismEditor';
-import { buildLogQLFromQueryRaw, buildLogQLFromQueryRawForUI } from '../util/LogqlBuilder';
+import { buildLogQLFromQueryRaw, buildLogQLFromQueryRawForUI, buildLogQLExpressions } from '../util/LogqlBuilder';
 import { toInternalLabel } from '../services/tags';
 
 interface Props {
@@ -61,12 +61,26 @@ export default function TracesTab({ datasourceId, query, onChange, timeRange, la
     [query.filters]
   );
 
+  // Build expression for scoping available tags based on current filters
+  const tagsFilterExpr = useMemo(() => {
+    // Only use complete filters (tag + values) for scoping
+    const completeFilters = stableFiltersForLabels.filter(
+      (f) => f.tag?.trim() && Array.isArray(f.value) && f.value.some((v) => v?.trim?.())
+    );
+    if (completeFilters.length === 0) {
+      return undefined;
+    }
+    const { filtersExpr } = buildLogQLExpressions({ filters: completeFilters });
+    return filtersExpr && filtersExpr !== '{}' ? filtersExpr : undefined;
+  }, [stableFiltersForLabels]);
+
   const { data: tags, loading } = useTags({
     datasourceId,
     startTime: query.timeFrom,
     endTime: query.timeTo,
     enabled: query.mode === 'traces',
     filters: stableFiltersForLabels,
+    expr: tagsFilterExpr,
     refreshKey: labelsRefreshKey,
     mode: 'traces',
   });

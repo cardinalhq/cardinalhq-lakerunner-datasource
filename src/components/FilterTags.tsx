@@ -19,6 +19,7 @@ import { InlineField, InlineFieldRow, Combobox, Input, Button, IconButton } from
 import { Filter, Operator } from '../types';
 import { FilterRow } from './FilterRowLogQL';
 import { useTags } from '../hooks/useTagKeys';
+import { promqlFromQueryBuilder } from '../util/MetricsBuilder';
 
 const ERROR_TAG = 'span_status_code';
 const DURATION_TAG = 'span_duration';
@@ -74,12 +75,28 @@ export function FilterBuilder(props: any) {
     [filters]
   );
 
+  // Build PromQL expression for scoping available tags (metrics mode)
+  const metricsTagsExpr = useMemo(() => {
+    if (mode !== 'metrics' || !metricName) {
+      return undefined;
+    }
+    // Build a PromQL expression from current filters + metric name
+    const fakeQuery = {
+      metricName,
+      filters: stableFilters,
+      groupBy: [],
+    };
+    const expr = promqlFromQueryBuilder(fakeQuery as any);
+    return expr || undefined;
+  }, [mode, metricName, stableFilters]);
+
   const { data: internalTags = [], loading: internalLoading } = useTags({
     datasourceId,
     startTime,
     endTime,
     enabled: mode === 'metrics' && !!metricName,
     filters: stableFilters,
+    expr: metricsTagsExpr,
     mode,
     metricName,
   });

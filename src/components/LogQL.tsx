@@ -19,7 +19,7 @@ import { InlineFieldRow, Tab, TabsBar } from '@grafana/ui';
 import { MyQuery, TEXT_OPERATORS } from '../types';
 import { useTags } from '../hooks/useTagKeys';
 import { PrismPromQLEditor } from './PrismEditor';
-import { buildLogQLFromQueryRaw, buildLogQLFromQueryRawForUI } from '../util/LogqlBuilder';
+import { buildLogQLFromQueryRaw, buildLogQLFromQueryRawForUI, buildLogQLExpressions } from '../util/LogqlBuilder';
 import { DataSource } from '../datasource';
 import { toInternalLabel } from '../services/tags';
 import { withHiddenFingerprint } from '../util/buildFinalLogQL';
@@ -61,12 +61,26 @@ export function LogQLTab({
     [query.filters]
   );
 
+  // Build expression for scoping available tags based on current filters
+  const tagsFilterExpr = useMemo(() => {
+    // Only use complete filters (tag + values) for scoping
+    const completeFilters = stableFiltersForLabels.filter(
+      (f) => f.tag?.trim() && Array.isArray(f.value) && f.value.some((v) => v?.trim?.())
+    );
+    if (completeFilters.length === 0) {
+      return undefined;
+    }
+    const { filtersExpr } = buildLogQLExpressions({ filters: completeFilters });
+    return filtersExpr && filtersExpr !== '{}' ? filtersExpr : undefined;
+  }, [stableFiltersForLabels]);
+
   const { data: tags, loading } = useTags({
     datasourceId,
     startTime: query.timeFrom,
     endTime: query.timeTo,
     enabled: true,
     filters: stableFiltersForLabels,
+    expr: tagsFilterExpr,
     refreshKey: labelsRefreshKey,
   });
 

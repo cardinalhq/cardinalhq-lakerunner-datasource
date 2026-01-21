@@ -30,6 +30,7 @@ type Options = {
   filters?: Filter[];
   mode?: Mode;
   metricName?: string;
+  expr?: string; // Optional query expression for scoping available tags
 };
 
 function buildKey(filters?: Filter[]): string {
@@ -50,6 +51,7 @@ export function useTags({
   filters,
   mode = 'logs',
   metricName,
+  expr,
 }: Options) {
   const filterKey = buildKey(filters);
   const canFetch = enabled && (mode === 'logs' || mode === 'traces' || (mode === 'metrics' && !!metricName));
@@ -62,6 +64,7 @@ export function useTags({
     datasourceId,
     modeKeyPart,
     filterKey,
+    expr ?? '',
     Math.floor(startTime / 60_000),
     Math.floor(endTime / 60_000),
     refreshKey,
@@ -84,6 +87,7 @@ export function useTags({
         setIsWaiting,
         mode,
         metricName,
+        expr,
         signal,
       }),
     staleTime: 5 * 60 * 1000,
