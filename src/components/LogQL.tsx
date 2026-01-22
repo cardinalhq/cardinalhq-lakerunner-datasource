@@ -15,8 +15,8 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { InlineFieldRow, Tab, TabsBar } from '@grafana/ui';
-import { MyQuery, TEXT_OPERATORS } from '../types';
+import { InlineField, InlineFieldRow, RadioButtonGroup, Tab, TabsBar } from '@grafana/ui';
+import { MyQuery, TEXT_OPERATORS, LogsDirection } from '../types';
 import { useTags } from '../hooks/useTagKeys';
 import { PrismPromQLEditor } from './PrismEditor';
 import { buildLogQLFromQueryRaw, buildLogQLFromQueryRawForUI, buildLogQLExpressions } from '../util/LogqlBuilder';
@@ -202,6 +202,11 @@ export function LogQLTab({
   const visibleFilters = useMemo(() => (query.filters ?? []).filter((f) => !isHiddenTag(f.tag)), [query.filters]);
   const effectiveTimeRange = timeRange || { startTime: query.timeFrom, endTime: query.timeTo };
 
+  const directionOptions: Array<{ label: string; value: LogsDirection }> = [
+    { label: 'Newest first', value: 'backward' },
+    { label: 'Oldest first', value: 'forward' },
+  ];
+
   return (
     <div>
       <div style={{ marginBottom: 8 }}>
@@ -232,6 +237,29 @@ export function LogQLTab({
             />
           ))}
         </TabsBar>
+      </div>
+
+      <div style={{ marginBottom: 8 }}>
+        <InlineFieldRow>
+          <InlineField
+            label="Fetch"
+            labelWidth={14}
+            tooltip="Controls which logs to fetch from time range. Use Grafana's flip button above to reverse display order."
+          >
+            <RadioButtonGroup
+              options={directionOptions}
+              value={query.direction ?? 'backward'}
+              onChange={(v: LogsDirection) => {
+                onChangeRef.current({
+                  ...queryRef.current,
+                  groupBy: groupByRef.current,
+                  direction: v,
+                });
+                onRunQuery();
+              }}
+            />
+          </InlineField>
+        </InlineFieldRow>
       </div>
 
       {subTab === 'builder' && (

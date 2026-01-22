@@ -188,7 +188,9 @@ export async function runLogQLQuery(
   const s = String(startMs);
   const e = String(endMs);
 
-  const body: any = { q: expr, s, e, reverse: true, limit: 1000 };
+  const direction = target.direction ?? 'backward';
+  const reverse = direction === 'backward';
+  const body: any = { q: expr, s, e, reverse, limit: 1000 };
   const fields = target.logqlSubTab === 'builder' ? target.builderFields : target.codeFields;
   if (Array.isArray(fields) && fields.length > 0) {
     body.fields = fields;
@@ -293,16 +295,31 @@ export async function runLogQLQuery(
 
   const buildLogsFrame = (): DataFrame => {
     const searchWords = extractSearchWords(target);
+
+    // Always sort logs descending (newest first)
+    // This is what Grafana expects - it will handle display order via its flip button
+    // The 'direction' parameter ONLY controls which logs to fetch, NOT display order
+    const indices = timestamps.map((_, i) => i);
+    indices.sort((a, b) => timestamps[b] - timestamps[a]);
+
+    // Reorder all arrays based on sorted indices
+    const sortedTimestamps = indices.map(i => timestamps[i]);
+    const sortedBodies = indices.map(i => bodies[i]);
+    const sortedSeverities = indices.map(i => severities[i]);
+    const sortedIds = indices.map(i => ids[i]);
+    const sortedLabelsArr = indices.map(i => labelsArr[i]);
+    const sortedFingerprints = indices.map(i => fingerprints[i]);
+
     const f = toDataFrame({
       refId: target.refId,
       name: 'logs',
       fields: [
-        { name: 'timestamp', type: FieldType.time, values: timestamps.slice() },
-        { name: 'body', type: FieldType.string, values: bodies.slice() },
-        { name: 'severity', type: FieldType.string, values: severities.slice() },
-        { name: 'id', type: FieldType.string, values: ids.slice() },
-        { name: 'labels', type: FieldType.other, values: labelsArr.slice() },
-        { name: 'fingerprint', type: FieldType.string, values: fingerprints.slice() },
+        { name: 'timestamp', type: FieldType.time, values: sortedTimestamps },
+        { name: 'body', type: FieldType.string, values: sortedBodies },
+        { name: 'severity', type: FieldType.string, values: sortedSeverities },
+        { name: 'id', type: FieldType.string, values: sortedIds },
+        { name: 'labels', type: FieldType.other, values: sortedLabelsArr },
+        { name: 'fingerprint', type: FieldType.string, values: sortedFingerprints },
       ],
     });
     f.meta = {

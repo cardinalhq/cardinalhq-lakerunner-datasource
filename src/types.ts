@@ -75,6 +75,8 @@ export interface Filter {
   computed?: boolean;
 }
 
+export type LogsDirection = 'backward' | 'forward';
+
 export interface MyQuery extends DataQuery {
   aggregationManuallyDeleted: any;
   filters?: Filter[];
@@ -97,6 +99,7 @@ export interface MyQuery extends DataQuery {
   logqlBuilderExp?: string;
   logqlEdited?: boolean;
   logqlSubTab?: 'builder' | 'code';
+  direction?: LogsDirection;
   timeFrom?: number;
   tracesSubTab?: 'builder' | 'code';
   tracesOutput?: string;

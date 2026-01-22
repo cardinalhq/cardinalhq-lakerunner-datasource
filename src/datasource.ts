@@ -65,6 +65,7 @@ export class DataSource
       logqlBuilderExp: undefined,
       logqlEdited: undefined,
       logqlSubTab: undefined,
+      direction: 'backward',
       tracesSubTab: undefined,
       tracesOutput: undefined,
       tracesEdited: undefined,
