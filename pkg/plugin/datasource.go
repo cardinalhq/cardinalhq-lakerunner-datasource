@@ -1093,19 +1093,68 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	}
 }
 
-func (d *Datasource) CheckHealth(_ context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	res := &backend.CheckHealthResult{}
+func (d *Datasource) CheckHealth(ctx context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
 	config, err := models.LoadPluginSettings(*req.PluginContext.DataSourceInstanceSettings)
 	if err != nil {
-		res.Status = backend.HealthStatusError
-		res.Message = "Unable to load settings"
-		return res, nil
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "Unable to load settings",
+		}, nil
+	}
+	if strings.TrimSpace(config.JsonData.CustomPath) == "" {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "URL is missing",
+		}, nil
 	}
 	if config.Secrets.ApiKey == "" {
-		res.Status = backend.HealthStatusError
-		res.Message = "API key is missing"
-		return res, nil
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "API key is missing",
+		}, nil
 	}
+
+	// Validate connection by calling the ping endpoint
+	pingURL := strings.TrimRight(config.JsonData.CustomPath, "/") + "/api/v1/ping"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, pingURL, nil)
+	if err != nil {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("Invalid URL: %v", err),
+		}, nil
+	}
+	httpReq.Header.Set("x-cardinalhq-api-key", config.Secrets.ApiKey)
+
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("Connection failed: %v", err),
+		}, nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "Invalid API key",
+		}, nil
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		// Older API versions may not have the ping endpoint - allow with warning
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusOk,
+			Message: "Connected (warning: unable to fully validate - server may need upgrade)",
+		}, nil
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("Server returned status %d: %s", resp.StatusCode, string(body)),
+		}, nil
+	}
+
 	return &backend.CheckHealthResult{
 		Status:  backend.HealthStatusOk,
 		Message: "Data source is working",
