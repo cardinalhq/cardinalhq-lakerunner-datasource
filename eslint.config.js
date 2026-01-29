@@ -10,7 +10,7 @@ module.exports = [
       "src/static/**",
     ],
   },
-  ...grafanaConfig,
+  ...grafanaConfig.filter(Boolean),
   {
     rules: {
       "react/prop-types": "off",
