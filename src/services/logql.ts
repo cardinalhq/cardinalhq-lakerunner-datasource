@@ -218,6 +218,7 @@ export async function runLogQLQuery(
 
   const seriesMap: Record<string, { ts: number[]; vals: number[]; labels?: Labels; display?: string }> = {};
   const timestamps: number[] = [];
+  const tsNsArr: string[] = [];
   const bodies: string[] = [];
   const severities: string[] = [];
   const ids: string[] = [];
@@ -304,6 +305,7 @@ export async function runLogQLQuery(
 
     // Reorder all arrays based on sorted indices
     const sortedTimestamps = indices.map(i => timestamps[i]);
+    const sortedTsNs = indices.map(i => tsNsArr[i]);
     const sortedBodies = indices.map(i => bodies[i]);
     const sortedSeverities = indices.map(i => severities[i]);
     const sortedIds = indices.map(i => ids[i]);
@@ -315,6 +317,7 @@ export async function runLogQLQuery(
       name: 'logs',
       fields: [
         { name: 'timestamp', type: FieldType.time, values: sortedTimestamps },
+        { name: 'tsNs', type: FieldType.string, values: sortedTsNs },
         { name: 'body', type: FieldType.string, values: sortedBodies },
         { name: 'severity', type: FieldType.string, values: sortedSeverities },
         { name: 'id', type: FieldType.string, values: sortedIds },
@@ -416,6 +419,7 @@ export async function runLogQLQuery(
       } else {
         const tags: Labels = asTags(d) ?? {};
         const ts = Number(d.timestamp ?? Date.now());
+        const tsNs = String(tags['chq_tsns'] ?? ts * 1_000_000);
         const body = String(asBody(d, tags));
         const level = String(tags['log_level'] ?? tags['level'] ?? '');
         const id = String(tags['chq_id'] ?? tags['id'] ?? '');
@@ -423,6 +427,7 @@ export async function runLogQLQuery(
         const base = baseLogLabelsFrom(tags, target);
         if (timestamps.length < MAX_INITIAL) {
           timestamps.push(ts);
+          tsNsArr.push(tsNs);
           bodies.push(body);
           severities.push(level);
           ids.push(id);
