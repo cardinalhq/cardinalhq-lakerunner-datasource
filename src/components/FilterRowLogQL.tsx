@@ -381,7 +381,9 @@ export function FilterRow(props: {
                   ? Array.isArray(filter.value)
                     ? filter.value.filter(Boolean)
                     : []
-                  : [''];
+                  : Array.isArray(filter.value)
+                    ? [filter.value[0] ?? '']
+                    : [''];
               onUpdate(index, { op: nextOp, value: nextVal });
             }}
             disabled={!filter.tag}
