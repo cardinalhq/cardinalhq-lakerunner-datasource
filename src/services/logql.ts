@@ -102,7 +102,7 @@ const prettyLabel = (s: string) => s.replace(/chq\./g, '');
 const baseLogLabelsFrom = (tags: Labels, target?: any): Labels => {
   const out: Labels = {};
   for (const [k, v] of Object.entries(tags || {})) {
-    if (k.startsWith('chq') || k.startsWith('_cardinalhq_')) {
+    if ((k.startsWith('chq') && k !== 'chq_tsns') || k.startsWith('_cardinalhq_')) {
       continue;
     }
     if (k === '__extracted_struct') {
