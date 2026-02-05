@@ -218,7 +218,7 @@ export async function runLogQLQuery(
 
   const seriesMap: Record<string, { ts: number[]; vals: number[]; labels?: Labels; display?: string }> = {};
   const timestamps: number[] = [];
-  const tsNsArr: string[] = [];
+  const nanosArr: number[] = [];
   const bodies: string[] = [];
   const severities: string[] = [];
   const ids: string[] = [];
@@ -305,7 +305,7 @@ export async function runLogQLQuery(
 
     // Reorder all arrays based on sorted indices
     const sortedTimestamps = indices.map(i => timestamps[i]);
-    const sortedTsNs = indices.map(i => tsNsArr[i]);
+    const sortedNanos = indices.map(i => nanosArr[i]);
     const sortedBodies = indices.map(i => bodies[i]);
     const sortedSeverities = indices.map(i => severities[i]);
     const sortedIds = indices.map(i => ids[i]);
@@ -316,8 +316,7 @@ export async function runLogQLQuery(
       refId: target.refId,
       name: 'logs',
       fields: [
-        { name: 'timestamp', type: FieldType.time, values: sortedTimestamps },
-        { name: 'tsNs', type: FieldType.string, values: sortedTsNs },
+        { name: 'timestamp', type: FieldType.time, values: sortedTimestamps, nanos: sortedNanos },
         { name: 'body', type: FieldType.string, values: sortedBodies },
         { name: 'severity', type: FieldType.string, values: sortedSeverities },
         { name: 'id', type: FieldType.string, values: sortedIds },
@@ -427,7 +426,9 @@ export async function runLogQLQuery(
         const base = baseLogLabelsFrom(tags, target);
         if (timestamps.length < MAX_INITIAL) {
           timestamps.push(ts);
-          tsNsArr.push(tsNs);
+          // Extract sub-millisecond nanosecond offset (0-999999) for Grafana's nanos field
+          const nanos = Number(BigInt(tsNs) % BigInt(1_000_000));
+          nanosArr.push(nanos);
           bodies.push(body);
           severities.push(level);
           ids.push(id);
