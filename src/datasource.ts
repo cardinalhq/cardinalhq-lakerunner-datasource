@@ -253,6 +253,11 @@ export class DataSource
       chartField: q.chartField,
       chartAggregation: q.chartAggregation,
       extractor: q.extractor,
+      logqlOutput: repl(q.logqlOutput),
+      logqlBuilderExp: repl(q.logqlBuilderExp),
+      promqlOutput: repl(q.promqlOutput),
+      tracesOutput: repl(q.tracesOutput),
+      tracesBuilderExp: repl(q.tracesBuilderExp),
     };
   }
 
@@ -494,10 +499,11 @@ export class DataSource
     signal: AbortSignal,
     emit?: (frames: DataFrame[]) => void
   ): Promise<DataFrame[]> {
-    if (target.mode === 'metrics') {
+    const mode = target.mode ?? 'logs';
+    if (mode === 'metrics') {
       return runPromQLQuery(this.id, target, range, signal, emit);
     }
-    if (target.mode === 'traces') {
+    if (mode === 'traces') {
       const key = this.normalizeRefId(target.refId);
       const topFilter = target.filters?.[0]
         ? `${target.filters[0].tag}:${target.filters[0].value?.join(',')}`
@@ -515,7 +521,7 @@ export class DataSource
         emit
       );
     }
-    if (target.mode === 'logs') {
+    if (mode === 'logs') {
       const key = this.normalizeRefId(target.refId);
       const currentFilterKey = this.generateFilterKey(target.filters ?? []);
       if (this.prevTopFilter[key] !== currentFilterKey) {
