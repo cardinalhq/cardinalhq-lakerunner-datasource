@@ -32,9 +32,21 @@ Create a new semantic version release tag.
    - Suggested bump type and new version
    - Options: suggested (Recommended), other bump types, custom version
 
-7. Create and push the tag:
+7. Update package.json version (without the 'v' prefix):
+   ```bash
+   npm version <version-without-v> --no-git-tag-version
+   ```
+
+8. Commit and push the package.json change:
+   ```bash
+   git add package.json package-lock.json
+   git commit -m "<version>"
+   git push
+   ```
+
+9. Create and push the tag:
    ```bash
    git tag <version> && git push origin <version>
    ```
 
-8. Report success with the new tag name
+10. Report success with the new tag name

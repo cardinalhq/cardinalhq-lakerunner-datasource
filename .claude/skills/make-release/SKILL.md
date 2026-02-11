@@ -13,7 +13,9 @@ Automate the release process by determining the next semantic version from git h
 2. **Get current version**: Find the latest semver tag (e.g., `v1.9.10`)
 3. **Analyze commits**: Review commits since last tag to determine version bump
 4. **Confirm with user**: Present the suggested bump and allow override
-5. **Create and push tag**: Tag the current commit and push to origin
+5. **Update package.json**: Bump version using npm version
+6. **Commit and push**: Commit package.json changes and push
+7. **Create and push tag**: Tag the current commit and push to origin
 
 ## Version Bump Rules
 
@@ -75,7 +77,23 @@ Based on commits:
 Options: [patch (Recommended)] [minor] [major] [custom]
 ```
 
-### Step 6: Create and Push Tag
+### Step 6: Update package.json
+
+Update the version in package.json (without 'v' prefix):
+
+```bash
+npm version <version-without-v> --no-git-tag-version
+```
+
+### Step 7: Commit and Push
+
+```bash
+git add package.json package-lock.json
+git commit -m "<new-version>"
+git push
+```
+
+### Step 8: Create and Push Tag
 
 ```bash
 git tag <new-version>
@@ -104,5 +122,7 @@ Suggested: patch bump → v1.9.11
 
 [Confirm version with user]
 
+Updated package.json to 1.9.11
+Committed and pushed package.json
 Created and pushed tag v1.9.11
 ```
