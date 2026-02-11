@@ -216,7 +216,7 @@ export async function runLogQLQuery(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
 
-  const seriesMap: Record<string, { ts: number[]; vals: number[]; labels?: Labels; display?: string }> = {};
+  const seriesMap: Record<string, { ts: number[]; vals: number[]; labels?: Labels }> = {};
   const timestamps: number[] = [];
   const nanosArr: number[] = [];
   const bodies: string[] = [];
@@ -235,9 +235,8 @@ export async function runLogQLQuery(
       const lvlRaw = lab['log_level'] ?? lab['level'];
       const levelStr = lvlRaw ? String(lvlRaw) : undefined;
       const fixedColor = levelStr ? levelColors[levelStr.toLowerCase()] : undefined;
-      const display = s.display ?? name;
-      const pretty = prettyLabel(display);
-      const fieldLabels = levelStr ? { ...lab, level: levelStr, detected_level: levelStr } : lab;
+      const pretty = prettyLabel(name);
+      const fieldLabels = levelStr ? { ...lab, level: levelStr } : lab;
       const frame = toDataFrame({
         refId: target.refId,
         name: pretty,
@@ -249,7 +248,7 @@ export async function runLogQLQuery(
             values: s.vals.slice(),
             labels: fieldLabels as any,
             config: {
-              displayNameFromDS: levelStr ? `{detected_level="${levelStr}", level="${levelStr}"}` : pretty,
+              displayNameFromDS: pretty,
               ...(fixedColor ? { color: { mode: 'fixed', fixedColor } } : { color: { mode: 'palette-classic' } }),
             },
           },
@@ -409,8 +408,7 @@ export async function runLogQLQuery(
                 .map(([k, v]) => `${k}=${v}`)
                 .join(', ') || 'series');
         if (!seriesMap[key]) {
-          const display = levelVal != null ? `level=${levelVal}` : d.label || key;
-          seriesMap[key] = { ts: [], vals: [], labels: tags, display };
+          seriesMap[key] = { ts: [], vals: [], labels: tags };
         }
         seriesMap[key].ts.push(ts);
         seriesMap[key].vals.push(val);
