@@ -1,0 +1,119 @@
+# This GitHub Action automates the process of building Grafana plugins.
+# (For more information, see https://github.com/grafana/plugin-actions/blob/main/build-plugin/README.md)
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Run workflow on version tags, e.g. v1.0.0.
+
+permissions: read-all
+
+jobs:
+  release:
+    permissions:
+      id-token: write
+      contents: write
+      attestations: write
+    runs-on: ubuntu-latest
+    env:
+      PLUGIN_ID: cardinalhq-lakerunner-datasource
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0  # Fetch all history for changelog generation
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION=${GITHUB_REF#refs/tags/v}
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            echo "Please update package.json to version $TAG_VERSION before tagging, or delete the tag and re-tag with v$PKG_VERSION"
+            exit 1
+          fi
+          echo "✓ Tag v$TAG_VERSION matches package.json version"
+
+      - uses: grafana/plugin-actions/build-plugin@main # zizmor: ignore[unpinned-uses] provided by grafana
+        with:
+          go-version: '1.25'
+          node-version: '22'
+          policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          # Check if this is an RC release
+          if [[ "$VERSION" == *"-rc"* ]] || [[ "$VERSION" == *"-RC"* ]]; then
+            echo "is_rc=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_rc=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get the previous tag
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found, using all commits"
+            git log --pretty=format:"- %s (%h)" --no-merges | head -50 > changelog.txt
+          else
+            echo "Generating changelog from $PREV_TAG to $GITHUB_REF_NAME"
+            git log --pretty=format:"- %s (%h)" --no-merges "$PREV_TAG".."$GITHUB_REF_NAME" > changelog.txt
+          fi
+
+      - name: Download versioned artifact and create unversioned copy
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          VERSIONED_ZIP="${PLUGIN_ID}-${VERSION}.zip"
+          UNVERSIONED_ZIP="${PLUGIN_ID}.zip"
+
+          echo "Downloading $VERSIONED_ZIP from release $GITHUB_REF_NAME..."
+          gh release download "$GITHUB_REF_NAME" --pattern "$VERSIONED_ZIP" --dir . --skip-existing
+
+          echo "Creating unversioned copy: $UNVERSIONED_ZIP"
+          cp "$VERSIONED_ZIP" "$UNVERSIONED_ZIP"
+
+      - name: Upload unversioned zip to lakerunner-datasource repo
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          UNVERSIONED_ZIP="${PLUGIN_ID}.zip"
+          REPO="cardinalhq/cardinalhq-lakerunner-datasource"
+
+          # Create release if it doesn't exist
+          if ! gh release view "v$VERSION" --repo "$REPO" &>/dev/null; then
+            echo "Creating release v$VERSION in $REPO..."
+            gh release create "v$VERSION" --repo "$REPO" --title "v$VERSION" --notes "Release v$VERSION"
+          fi
+
+          echo "Uploading $UNVERSIONED_ZIP to $REPO release v$VERSION..."
+          gh release upload "v$VERSION" "$UNVERSIONED_ZIP" --clobber --repo "$REPO"
+
+      - name: Update release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_RC: ${{ steps.get_version.outputs.is_rc }}
+        run: |
+          # Build the release notes file
+          {
+            echo "## Changes since last release"
+            echo ""
+            cat changelog.txt
+          } > release_notes.md
+
+          if [ "$IS_RC" = "true" ]; then
+            echo "RC release detected, keeping as draft"
+            gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md
+          else
+            echo "Production release detected, publishing"
+            gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md --draft=false
+          fi

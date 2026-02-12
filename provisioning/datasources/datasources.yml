@@ -1,0 +1,14 @@
+apiVersion: 1
+
+datasources:
+  - name: 'Cardinal'
+    type: 'cardinalhq-lakerunner-datasource'
+    access: proxy
+    isDefault: true
+    orgId: 1
+    version: 1
+    editable: true
+    jsonData:
+      path: '/resources'
+    secureJsonData:
+      apiKey: 'api-key'

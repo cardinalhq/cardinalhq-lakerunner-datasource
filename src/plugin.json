@@ -1,0 +1,32 @@
+{
+  "type": "datasource",
+  "name": "Cardinal LakeRunner",
+  "id": "cardinalhq-lakerunner-datasource",
+  "metrics": true,
+  "logs": true,
+  "tracing": true,
+  "backend": true,
+  "alerting": true,
+  "executable": "gpx_cardinalhq_datasource",
+  "info": {
+    "description": "Explore and visualize logs, metrics, and traces stored in your own open-source private datalake",
+    "author": {
+      "name": "Cardinal HQ",
+      "email": "support@cardinalhq.io",
+      "url": "https://cardinalhq.io"
+    },
+    "keywords": ["datasource", "cardinal", "lakerunner", "logs", "metrics", "traces", "observability"],
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [],
+    "screenshots": [],
+    "version": "%VERSION%",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaDependency": ">=10.0.0",
+    "plugins": []
+  }
+}
