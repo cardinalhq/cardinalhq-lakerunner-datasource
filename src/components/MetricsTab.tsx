@@ -15,9 +15,9 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { InlineField, InlineFieldRow, Combobox, Tab, TabsBar } from '@grafana/ui';
+import { InlineField, InlineFieldRow, Combobox, Tab, TabsBar, Input, Switch } from '@grafana/ui';
 import { DataSource } from '../datasource';
-import { Filter, MyQuery, Operator } from '../types';
+import { Filter, MyQuery, Operator, VALUE_THRESHOLD_OPTIONS, ValueThresholdOperator } from '../types';
 import { PrismPromQLEditor } from './PrismEditor';
 import { promqlFromQueryBuilder } from '../util/MetricsBuilder';
 import { FilterBuilder } from './FilterTags';
@@ -240,6 +240,60 @@ export function MetricsTab(props: {
             onMetricValueAsChange={(v: any) => onChange({ ...query, valueAs: v })}
             onMetricValueAsDelete={() => onChange({ ...query, valueAs: undefined })}
           />
+
+          <InlineFieldRow style={{ marginTop: 8, alignItems: 'center' }}>
+            <InlineField label="Only show series where max value" tooltip="Filter to only show series where the maximum value meets this condition. Disables streaming.">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Switch
+                  value={query.valueThreshold?.enabled ?? false}
+                  onChange={(e) => {
+                    const enabled = e.currentTarget.checked;
+                    onChange({
+                      ...query,
+                      valueThreshold: {
+                        enabled,
+                        operator: query.valueThreshold?.operator ?? '>',
+                        value: query.valueThreshold?.value ?? 0,
+                      },
+                    });
+                  }}
+                />
+                {query.valueThreshold?.enabled && (
+                  <>
+                    <Combobox
+                      options={VALUE_THRESHOLD_OPTIONS}
+                      value={query.valueThreshold?.operator ?? '>'}
+                      onChange={(opt) => {
+                        onChange({
+                          ...query,
+                          valueThreshold: {
+                            ...query.valueThreshold!,
+                            operator: (opt?.value as ValueThresholdOperator) ?? '>',
+                          },
+                        });
+                      }}
+                      width={8}
+                    />
+                    <Input
+                      type="number"
+                      value={query.valueThreshold?.value ?? 0}
+                      onChange={(e) => {
+                        const val = parseFloat(e.currentTarget.value);
+                        onChange({
+                          ...query,
+                          valueThreshold: {
+                            ...query.valueThreshold!,
+                            value: Number.isFinite(val) ? val : 0,
+                          },
+                        });
+                      }}
+                      width={12}
+                    />
+                  </>
+                )}
+              </div>
+            </InlineField>
+          </InlineFieldRow>
 
           {!!promqlPreview && (
             <div style={{ marginTop: 8 }}>
