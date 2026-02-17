@@ -77,7 +77,14 @@ export interface Filter {
 
 export type LogsDirection = 'backward' | 'forward';
 
-export type ValueThresholdOperator = '>' | '<' | '>=' | '<=';
+import type {
+  ValueThresholdOperator as _ValueThresholdOperator,
+  ValueThreshold as _ValueThreshold,
+  SeriesSummary as _SeriesSummary,
+} from './util/threshold';
+export type ValueThresholdOperator = _ValueThresholdOperator;
+export type ValueThreshold = _ValueThreshold;
+export type SeriesSummary = _SeriesSummary;
 
 export const VALUE_THRESHOLD_OPTIONS: Array<{ label: string; value: ValueThresholdOperator }> = [
   { label: '>', value: '>' },
@@ -85,26 +92,6 @@ export const VALUE_THRESHOLD_OPTIONS: Array<{ label: string; value: ValueThresho
   { label: '≥', value: '>=' },
   { label: '≤', value: '<=' },
 ];
-
-export interface ValueThreshold {
-  enabled: boolean;
-  operator: ValueThresholdOperator;
-  value: number;
-}
-
-export interface SeriesSummary {
-  label: string;
-  tags: Record<string, unknown>;
-  min: number;
-  max: number;
-  avg: number;
-  sum: number;
-  count: number;
-  p50: number;
-  p90: number;
-  p95: number;
-  p99: number;
-}
 
 export interface MyQuery extends DataQuery {
   aggregationManuallyDeleted: any;

@@ -15,7 +15,8 @@
  */
 
 import { DataFrame, DataQueryRequest, FieldType, toDataFrame } from '@grafana/data';
-import { MyQuery, SeriesSummary, ValueThreshold } from 'types';
+import { MyQuery } from 'types';
+import { matchesThreshold, SeriesSummary } from '../util/threshold';
 
 type SeriesBuf = { timestamps: number[]; values: number[] };
 
@@ -85,25 +86,6 @@ export async function fetchMetricsSummary(
   }
 
   return summaries;
-}
-
-/**
- * Checks if a series summary matches the given threshold condition.
- */
-function matchesThreshold(summary: SeriesSummary, threshold: ValueThreshold): boolean {
-  const value = summary.max; // We use max value for threshold comparison
-  switch (threshold.operator) {
-    case '>':
-      return value > threshold.value;
-    case '<':
-      return value < threshold.value;
-    case '>=':
-      return value >= threshold.value;
-    case '<=':
-      return value <= threshold.value;
-    default:
-      return true;
-  }
 }
 
 export async function runPromQLQuery(
