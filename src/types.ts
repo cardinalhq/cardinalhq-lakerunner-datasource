@@ -16,6 +16,8 @@
 
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData } from '@grafana/data';
+import type { ValueThresholdOperator, ValueThreshold, SeriesSummary } from './util/threshold';
+export type { ValueThresholdOperator, ValueThreshold, SeriesSummary };
 
 export type Operator =
   | '='
@@ -76,15 +78,6 @@ export interface Filter {
 }
 
 export type LogsDirection = 'backward' | 'forward';
-
-import type {
-  ValueThresholdOperator as _ValueThresholdOperator,
-  ValueThreshold as _ValueThreshold,
-  SeriesSummary as _SeriesSummary,
-} from './util/threshold';
-export type ValueThresholdOperator = _ValueThresholdOperator;
-export type ValueThreshold = _ValueThreshold;
-export type SeriesSummary = _SeriesSummary;
 
 export const VALUE_THRESHOLD_OPTIONS: Array<{ label: string; value: ValueThresholdOperator }> = [
   { label: '>', value: '>' },

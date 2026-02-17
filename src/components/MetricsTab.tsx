@@ -242,7 +242,7 @@ export function MetricsTab(props: {
           />
 
           <InlineFieldRow style={{ marginTop: 8, alignItems: 'center' }}>
-            <InlineField label="Only show series where max value" tooltip="Filter to only show series where the maximum value meets this condition. Disables streaming.">
+            <InlineField label="Only show series where max value" tooltip="Filter to only show series where the maximum value meets this condition.">
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Switch
                   value={query.valueThreshold?.enabled ?? false}

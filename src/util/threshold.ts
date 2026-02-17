@@ -24,7 +24,7 @@ export interface ValueThreshold {
 
 export interface SeriesSummary {
   label: string;
-  tags: Record<string, unknown>;
+  tags: Record<string, string | number>;
   min: number;
   max: number;
   avg: number;

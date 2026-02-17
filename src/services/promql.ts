@@ -62,6 +62,8 @@ export async function fetchMetricsSummary(
   while (true) {
     const { value, done } = await reader.read();
     if (done) {
+      // Flush decoder and process any remaining buffer
+      buffer += decoder.decode();
       break;
     }
     buffer += decoder.decode(value, { stream: true });
@@ -82,6 +84,18 @@ export async function fetchMetricsSummary(
       } catch {
         // noop
       }
+    }
+  }
+
+  // Process any remaining buffered line after stream ends
+  if (buffer.trim().startsWith('data:')) {
+    try {
+      const parsed = JSON.parse(buffer.trim().slice(5).trim());
+      if (parsed?.type === 'summary' && parsed.data) {
+        summaries.push(parsed.data as SeriesSummary);
+      }
+    } catch {
+      // noop
     }
   }
 
