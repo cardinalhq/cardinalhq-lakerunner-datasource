@@ -107,7 +107,8 @@ export async function runPromQLQuery(
   target: MyQuery,
   range: DataQueryRequest['range'],
   signal: AbortSignal,
-  emit?: (frames: DataFrame[]) => void
+  emit?: (frames: DataFrame[]) => void,
+  supportsMetricsSummarySSE = false
 ) {
   const startTime = range.from.valueOf();
   const endTime = range.to.valueOf();
@@ -115,19 +116,25 @@ export async function runPromQLQuery(
 
   // If threshold filtering is enabled, fetch summaries first to determine which series to include
   let allowedLabels: Set<string> | null = null;
-  if (threshold?.enabled && target.promqlOutput) {
+  if (supportsMetricsSummarySSE && threshold?.enabled && target.promqlOutput) {
     try {
       const summaries = await fetchMetricsSummary(dataSourceId, target.promqlOutput, startTime, endTime, signal);
       // Filter to only series that match the threshold
       const matchingSummaries = summaries.filter((s) => matchesThreshold(s, threshold));
-      allowedLabels = new Set(matchingSummaries.map((s) => s.label));
 
-      // If no series match, return empty result immediately
-      if (allowedLabels.size === 0) {
-        if (emit) {
-          emit([]);
+      // If no summary rows are returned, treat as unsupported behavior and fall back to unfiltered query.
+      if (summaries.length > 0) {
+        allowedLabels = new Set(matchingSummaries.map((s) => s.label));
+
+        // If no series match, return empty result immediately
+        if (allowedLabels.size === 0) {
+          if (emit) {
+            emit([]);
+          }
+          return [];
         }
-        return [];
+      } else {
+        allowedLabels = null;
       }
     } catch (err) {
       // If summary API fails (e.g., older backend), fall back to no filtering

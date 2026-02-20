@@ -55,6 +55,7 @@ export function MetricsTab(props: {
 }) {
   const { datasource, query, onChange, timeRange, setIsWaiting } = props;
   const subTab: 'builder' | 'code' = (query.promqlSubTab as any) ?? 'builder';
+  const [supportsValueThresholdFilter, setSupportsValueThresholdFilter] = useState(false);
 
   const { data: metricOptions = [] } = useMetricNames(datasource.id, setIsWaiting);
 
@@ -134,6 +135,25 @@ export function MetricsTab(props: {
       setCodeDraft(lastBuilderExpr || query.promqlOutput || '');
     }
   }, [subTab, query.promqlEdited, query.promqlOutput, lastBuilderExpr]);
+
+  useEffect(() => {
+    let cancelled = false;
+    datasource
+      .supportsMetricsSummarySSE()
+      .then((supported) => {
+        if (!cancelled) {
+          setSupportsValueThresholdFilter(supported);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSupportsValueThresholdFilter(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [datasource]);
 
   const effectiveTimeRange = timeRange || { startTime: query.timeFrom, endTime: query.timeTo };
 
@@ -241,59 +261,61 @@ export function MetricsTab(props: {
             onMetricValueAsDelete={() => onChange({ ...query, valueAs: undefined })}
           />
 
-          <InlineFieldRow style={{ marginTop: 8, alignItems: 'center' }}>
-            <InlineField label="Only show series where max value" tooltip="Filter to only show series where the maximum value meets this condition.">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Switch
-                  value={query.valueThreshold?.enabled ?? false}
-                  onChange={(e) => {
-                    const enabled = e.currentTarget.checked;
-                    onChange({
-                      ...query,
-                      valueThreshold: {
-                        enabled,
-                        operator: query.valueThreshold?.operator ?? '>',
-                        value: query.valueThreshold?.value ?? 0,
-                      },
-                    });
-                  }}
-                />
-                {query.valueThreshold?.enabled && (
-                  <>
-                    <Combobox
-                      options={VALUE_THRESHOLD_OPTIONS}
-                      value={query.valueThreshold?.operator ?? '>'}
-                      onChange={(opt) => {
-                        onChange({
-                          ...query,
-                          valueThreshold: {
-                            ...query.valueThreshold!,
-                            operator: (opt?.value as ValueThresholdOperator) ?? '>',
-                          },
-                        });
-                      }}
-                      width={8}
-                    />
-                    <Input
-                      type="number"
-                      value={query.valueThreshold?.value ?? 0}
-                      onChange={(e) => {
-                        const val = parseFloat(e.currentTarget.value);
-                        onChange({
-                          ...query,
-                          valueThreshold: {
-                            ...query.valueThreshold!,
-                            value: Number.isFinite(val) ? val : 0,
-                          },
-                        });
-                      }}
-                      width={12}
-                    />
-                  </>
-                )}
-              </div>
-            </InlineField>
-          </InlineFieldRow>
+          {supportsValueThresholdFilter && (
+            <InlineFieldRow style={{ marginTop: 8, alignItems: 'center' }}>
+              <InlineField label="Only show series where max value" tooltip="Filter to only show series where the maximum value meets this condition.">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Switch
+                    value={query.valueThreshold?.enabled ?? false}
+                    onChange={(e) => {
+                      const enabled = e.currentTarget.checked;
+                      onChange({
+                        ...query,
+                        valueThreshold: {
+                          enabled,
+                          operator: query.valueThreshold?.operator ?? '>',
+                          value: query.valueThreshold?.value ?? 0,
+                        },
+                      });
+                    }}
+                  />
+                  {query.valueThreshold?.enabled && (
+                    <>
+                      <Combobox
+                        options={VALUE_THRESHOLD_OPTIONS}
+                        value={query.valueThreshold?.operator ?? '>'}
+                        onChange={(opt) => {
+                          onChange({
+                            ...query,
+                            valueThreshold: {
+                              ...query.valueThreshold!,
+                              operator: (opt?.value as ValueThresholdOperator) ?? '>',
+                            },
+                          });
+                        }}
+                        width={8}
+                      />
+                      <Input
+                        type="number"
+                        value={query.valueThreshold?.value ?? 0}
+                        onChange={(e) => {
+                          const val = parseFloat(e.currentTarget.value);
+                          onChange({
+                            ...query,
+                            valueThreshold: {
+                              ...query.valueThreshold!,
+                              value: Number.isFinite(val) ? val : 0,
+                            },
+                          });
+                        }}
+                        width={12}
+                      />
+                    </>
+                  )}
+                </div>
+              </InlineField>
+            </InlineFieldRow>
+          )}
 
           {!!promqlPreview && (
             <div style={{ marginTop: 8 }}>

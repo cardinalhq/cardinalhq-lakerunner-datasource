@@ -37,6 +37,7 @@ import { Filter, MyDataSourceOptions, MyQuery, TEXT_OPERATORS } from './types';
 import { runLogQLQuery } from 'services/logql';
 import { runTracesQuery } from 'services/traces';
 import { fetchTags as fetchTagKeys, fetchTagValues } from './services/tags';
+import { DataSourceFeatures, fetchDataSourceFeatures } from './services/features';
 
 export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
@@ -204,9 +205,22 @@ export class DataSource
   }
 
   private readonly instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>;
+  private featuresPromise: Promise<DataSourceFeatures> | null = null;
   constructor(instanceSettings: DataSourceInstanceSettings<MyDataSourceOptions>) {
     super(instanceSettings);
     this.instanceSettings = instanceSettings;
+  }
+
+  private async getFeatures(): Promise<DataSourceFeatures> {
+    if (!this.featuresPromise) {
+      this.featuresPromise = fetchDataSourceFeatures(this.id).catch(() => ({ metricsSummarySSE: false }));
+    }
+    return this.featuresPromise;
+  }
+
+  public async supportsMetricsSummarySSE(): Promise<boolean> {
+    const features = await this.getFeatures();
+    return features.metricsSummarySSE;
   }
 
   public isTracesEnabled(): boolean {
@@ -501,7 +515,8 @@ export class DataSource
   ): Promise<DataFrame[]> {
     const mode = target.mode ?? 'logs';
     if (mode === 'metrics') {
-      return runPromQLQuery(this.id, target, range, signal, emit);
+      const supportsMetricsSummarySSE = await this.supportsMetricsSummarySSE();
+      return runPromQLQuery(this.id, target, range, signal, emit, supportsMetricsSummarySSE);
     }
     if (mode === 'traces') {
       const key = this.normalizeRefId(target.refId);
