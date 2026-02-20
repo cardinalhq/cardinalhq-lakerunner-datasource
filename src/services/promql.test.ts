@@ -19,7 +19,7 @@ jest.mock('@grafana/data', () => ({
   toDataFrame: (frame: any) => frame,
 }));
 
-import { runPromQLQuery } from './promql';
+import { runPromQLQuery, applyLegendFormat } from './promql';
 import type { MyQuery } from '../types';
 
 function mockSSEBody(events: string[]) {
@@ -95,5 +95,173 @@ describe('runPromQLQuery threshold behavior', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(frames).toHaveLength(1);
     expect(frames[0].fields[1].values.length).toBe(2);
+  });
+});
+
+describe('applyLegendFormat', () => {
+  it('substitutes matching tag keys', () => {
+    expect(applyLegendFormat('{{svc}} - {{env}}', { svc: 'frontend', env: 'prod' })).toBe('frontend - prod');
+  });
+
+  it('leaves unresolved placeholders as-is', () => {
+    expect(applyLegendFormat('{{svc}} - {{missing}}', { svc: 'frontend' })).toBe('frontend - {{missing}}');
+  });
+
+  it('returns null for empty format', () => {
+    expect(applyLegendFormat('', { svc: 'frontend' })).toBeNull();
+  });
+
+  it('returns null when tags are undefined', () => {
+    expect(applyLegendFormat('{{svc}}', undefined)).toBeNull();
+  });
+
+  it('substitutes keys with dots, dashes, and colons', () => {
+    expect(
+      applyLegendFormat('{{resource.service.name}} / {{k8s-pod:name}}', {
+        'resource.service.name': 'frontend',
+        'k8s-pod:name': 'web-0',
+      })
+    ).toBe('frontend / web-0');
+  });
+});
+
+describe('runPromQLQuery legendFormat', () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  it('applies legendFormat template to display name', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as any;
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: mockSSEBody([
+        'data: {"type":"result","data":{"timestamp":1000,"label":"raw-label","value":42,"tags":{"resource_service_name":"frontend","__name__":"http_duration"}}}\n',
+      ]),
+      text: async () => '',
+    } as any);
+
+    const target: MyQuery = {
+      refId: 'A',
+      mode: 'metrics',
+      aggregationManuallyDeleted: null,
+      promqlOutput: 'some_metric',
+      legendFormat: '{{resource_service_name}}',
+    };
+
+    const frames = await runPromQLQuery(
+      1,
+      target,
+      { from: { valueOf: () => 0 } as any, to: { valueOf: () => 2000 } as any } as any,
+      new AbortController().signal
+    );
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0].fields[1].config.displayNameFromDS).toBe('frontend');
+    expect(frames[0].fields[1].labels).toEqual({
+      resource_service_name: 'frontend',
+      __name__: 'http_duration',
+    });
+  });
+
+  it('falls back to raw label when legendFormat is empty', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as any;
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: mockSSEBody([
+        'data: {"type":"result","data":{"timestamp":1000,"label":"my-raw-label","value":42,"tags":{"svc":"frontend"}}}\n',
+      ]),
+      text: async () => '',
+    } as any);
+
+    const target: MyQuery = {
+      refId: 'A',
+      mode: 'metrics',
+      aggregationManuallyDeleted: null,
+      promqlOutput: 'some_metric',
+    };
+
+    const frames = await runPromQLQuery(
+      1,
+      target,
+      { from: { valueOf: () => 0 } as any, to: { valueOf: () => 2000 } as any } as any,
+      new AbortController().signal
+    );
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0].fields[1].config.displayNameFromDS).toBe('my-raw-label');
+    expect(frames[0].fields[1].labels).toEqual({ svc: 'frontend' });
+  });
+
+  it('sets tags as field labels even without legendFormat', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as any;
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: mockSSEBody([
+        'data: {"type":"result","data":{"timestamp":1000,"label":"lbl","value":1}}\n',
+      ]),
+      text: async () => '',
+    } as any);
+
+    const target: MyQuery = {
+      refId: 'A',
+      mode: 'metrics',
+      aggregationManuallyDeleted: null,
+      promqlOutput: 'metric',
+    };
+
+    const frames = await runPromQLQuery(
+      1,
+      target,
+      { from: { valueOf: () => 0 } as any, to: { valueOf: () => 2000 } as any } as any,
+      new AbortController().signal
+    );
+
+    expect(frames).toHaveLength(1);
+    // No tags in SSE data → labels should be undefined
+    expect(frames[0].fields[1].labels).toBeUndefined();
+  });
+
+  it('falls back to raw label when legendFormat is set but tags are missing', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as any;
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: mockSSEBody([
+        'data: {"type":"result","data":{"timestamp":1000,"label":"raw-label","value":5}}\n',
+      ]),
+      text: async () => '',
+    } as any);
+
+    const target: MyQuery = {
+      refId: 'A',
+      mode: 'metrics',
+      aggregationManuallyDeleted: null,
+      promqlOutput: 'metric',
+      legendFormat: '{{resource_service_name}}',
+    };
+
+    const frames = await runPromQLQuery(
+      1,
+      target,
+      { from: { valueOf: () => 0 } as any, to: { valueOf: () => 2000 } as any } as any,
+      new AbortController().signal
+    );
+
+    expect(frames).toHaveLength(1);
+    expect(frames[0].fields[1].config.displayNameFromDS).toBe('raw-label');
   });
 });

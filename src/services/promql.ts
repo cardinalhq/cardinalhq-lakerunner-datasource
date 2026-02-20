@@ -18,7 +18,20 @@ import { DataFrame, DataQueryRequest, FieldType, toDataFrame } from '@grafana/da
 import { MyQuery } from 'types';
 import { matchesThreshold, SeriesSummary } from '../util/threshold';
 
-type SeriesBuf = { timestamps: number[]; values: number[] };
+export function applyLegendFormat(format: string, tags: Record<string, any> | undefined): string | null {
+  if (!format) {
+    return null;
+  }
+  if (!tags) {
+    return null;
+  }
+  return format.replace(/\{\{([\w.:\-]+)\}\}/g, (match, key) => {
+    const val = tags[key];
+    return val !== undefined && val !== null ? String(val) : match;
+  });
+}
+
+type SeriesBuf = { timestamps: number[]; values: number[]; tags?: Record<string, any> };
 
 /**
  * Fetches per-series summary statistics (min/max/avg/etc.) from the API.
@@ -183,6 +196,7 @@ export async function runPromQLQuery(
   const flushMetricFramesInto = (dst: DataFrame[]) => {
     for (const [label, series] of Object.entries(frameData)) {
       const ref = target.refId;
+      const displayName = applyLegendFormat(target.legendFormat ?? '', series.tags) ?? label;
 
       const frame = toDataFrame({
         refId: ref,
@@ -193,8 +207,9 @@ export async function runPromQLQuery(
             name: 'Value',
             type: FieldType.number,
             values: series.values.slice(),
+            labels: series.tags ?? undefined,
             config: {
-              displayNameFromDS: label,
+              displayNameFromDS: displayName,
             },
           },
         ],
@@ -254,7 +269,7 @@ export async function runPromQLQuery(
           }
 
           if (!frameData[label]) {
-            frameData[label] = { timestamps: [], values: [] };
+            frameData[label] = { timestamps: [], values: [], tags: d.tags ?? undefined };
           }
 
           frameData[label].timestamps.push(ts);
