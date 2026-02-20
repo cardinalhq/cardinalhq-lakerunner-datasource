@@ -102,6 +102,7 @@ export interface MyQuery extends DataQuery {
   promqlDescription?: string;
   promqlOutput?: string;
   promqlEdited?: boolean;
+  legendFormat?: string;
   promqlSubTab?: 'builder' | 'code';
   logqlAggregation?: Aggregation;
   logqlOutput?: string;

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -64,6 +65,7 @@ type queryModel struct {
 	Filters          []uiFilter `json:"filters"`
 	QueryText        string     `json:"queryText"`
 	PromqlOutput     string     `json:"promqlOutput"`
+	LegendFormat     string     `json:"legendFormat"`
 	ValueAs          string     `json:"valueAs"`
 	LogqlOutput      string     `json:"logqlOutput"`
 	LogqlAggregation string     `json:"logqlAggregation"`
@@ -471,6 +473,24 @@ func prettyLabel(s string) string {
 	return strings.ReplaceAll(s, "_cardinalhq.", "")
 }
 
+var legendFormatRe = regexp.MustCompile(`\{\{([\w.:\-]+)\}\}`)
+
+func applyLegendFormat(format string, tags map[string]any) string {
+	if format == "" {
+		return ""
+	}
+	if len(tags) == 0 {
+		return ""
+	}
+	return legendFormatRe.ReplaceAllStringFunc(format, func(match string) string {
+		key := match[2 : len(match)-2]
+		if v, ok := tags[key]; ok {
+			return fmt.Sprint(v)
+		}
+		return match
+	})
+}
+
 func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
 	var response backend.DataResponse
 	var qm queryModel
@@ -570,6 +590,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		type seriesData struct {
 			timestamps []int64
 			values     []float64
+			tags       map[string]any
 		}
 		frameData := map[string]*seriesData{}
 
@@ -600,6 +621,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 							Timestamp json.Number `json:"timestamp"`
 							Value     json.Number `json:"value"`
 							Label     string      `json:"label"`
+							Tags  map[string]any `json:"tags"`
 						} `json:"data"`
 					}
 					if err := json.Unmarshal([]byte(msgStr), &parsed); err != nil {
@@ -634,7 +656,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 					}
 
 					if frameData[label] == nil {
-						frameData[label] = &seriesData{}
+						frameData[label] = &seriesData{tags: parsed.Data.Tags}
 					}
 					frameData[label].timestamps = append(frameData[label].timestamps, ts)
 					frameData[label].values = append(frameData[label].values, val)
@@ -671,8 +693,24 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 			}
 
 			timeField := data.NewField("Time", nil, times)
-			valueField := data.NewField("Value", nil, vals)
-			valueField.Config = &data.FieldConfig{DisplayNameFromDS: label}
+
+			// Convert tags to data.Labels (map[string]string) for Grafana field labels
+			var fieldLabels data.Labels
+			if len(sd.tags) > 0 {
+				fieldLabels = make(data.Labels, len(sd.tags))
+				for k, v := range sd.tags {
+					fieldLabels[k] = fmt.Sprint(v)
+				}
+			}
+
+			// Apply legendFormat template substitution
+			displayName := label
+			if lf := applyLegendFormat(qm.LegendFormat, sd.tags); lf != "" {
+				displayName = lf
+			}
+
+			valueField := data.NewField("Value", fieldLabels, vals)
+			valueField.Config = &data.FieldConfig{DisplayNameFromDS: displayName}
 
 			frame := data.NewFrame(query.RefID, timeField, valueField)
 			frame.RefID = query.RefID
