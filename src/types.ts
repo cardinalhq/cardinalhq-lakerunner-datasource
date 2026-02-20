@@ -16,6 +16,8 @@
 
 import { DataQuery } from '@grafana/schema';
 import { DataSourceJsonData } from '@grafana/data';
+import type { ValueThresholdOperator, ValueThreshold, SeriesSummary } from './util/threshold';
+export type { ValueThresholdOperator, ValueThreshold, SeriesSummary };
 
 export type Operator =
   | '='
@@ -77,6 +79,13 @@ export interface Filter {
 
 export type LogsDirection = 'backward' | 'forward';
 
+export const VALUE_THRESHOLD_OPTIONS: Array<{ label: string; value: ValueThresholdOperator }> = [
+  { label: '>', value: '>' },
+  { label: '<', value: '<' },
+  { label: '≥', value: '>=' },
+  { label: '≤', value: '<=' },
+];
+
 export interface MyQuery extends DataQuery {
   aggregationManuallyDeleted: any;
   filters?: Filter[];
@@ -125,6 +134,7 @@ export interface MyQuery extends DataQuery {
       userSelected: boolean;
     }>;
   };
+  valueThreshold?: ValueThreshold;
 }
 
 export const DEFAULT_QUERY: Partial<MyQuery> = {
