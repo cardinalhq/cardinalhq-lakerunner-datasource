@@ -599,6 +599,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		buf := make([]byte, 32*1024)
 		sseSamples := 0
 		const sseSampleMax = 5
+		doneReceived := false
 
 		for {
 			n, rerr := reader.Read(buf)
@@ -633,6 +634,14 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 						sseSamples++
 					}
 
+					if parsed.Type == "done" || parsed.Type == "end" {
+						doneReceived = true
+						continue
+					}
+					if parsed.Type == "heartbeat" {
+						continue
+					}
+
 					// Handle "result" type (like frontend) and "timeseries" type (legacy)
 					if parsed.Type != "result" && parsed.Type != "timeseries" {
 						continue
@@ -665,10 +674,13 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 
 			if rerr != nil {
 				if rerr == io.EOF {
-					log.DefaultLogger.Debug("SSE stream EOF", "seriesCount", len(frameData), "sseSamples", sseSamples)
+					log.DefaultLogger.Debug("SSE stream EOF", "doneReceived", doneReceived, "seriesCount", len(frameData), "sseSamples", sseSamples)
 					break
 				}
 				return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Error reading stream: %v", rerr))
+			}
+			if doneReceived {
+				break
 			}
 		}
 
@@ -785,6 +797,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 		buf := make([]byte, 32*1024)
 		sseSamples := 0
 		const sseSampleMax = 5
+		doneReceived := false
 
 		for {
 			n, rerr := reader.Read(buf)
@@ -818,6 +831,14 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 						sseSamples++
 					}
 
+					if parsed.Type == "done" || parsed.Type == "end" {
+						doneReceived = true
+						continue
+					}
+					if parsed.Type == "heartbeat" {
+						continue
+					}
+
 					// Handle "result" type messages
 					if parsed.Type != "result" {
 						continue
@@ -847,10 +868,13 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 
 			if rerr != nil {
 				if rerr == io.EOF {
-					log.DefaultLogger.Debug("SSE stream EOF", "seriesCount", len(frameData), "sseSamples", sseSamples)
+					log.DefaultLogger.Debug("SSE stream EOF", "doneReceived", doneReceived, "seriesCount", len(frameData), "sseSamples", sseSamples)
 					break
 				}
 				return backend.ErrDataResponse(backend.StatusBadRequest, fmt.Sprintf("Error reading stream: %v", rerr))
+			}
+			if doneReceived {
+				break
 			}
 		}
 
