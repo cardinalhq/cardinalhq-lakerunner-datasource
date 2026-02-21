@@ -248,6 +248,17 @@ export async function runPromQLQuery(
       }
       try {
         const parsed = JSON.parse(line.slice(5).trim());
+        if (parsed?.type === 'done' || parsed?.type === 'end') {
+          const frames: DataFrame[] = [];
+          flushMetricFramesInto(frames);
+          if (emit && frames.length) {
+            emit(frames);
+          }
+          return frames;
+        }
+        if (parsed?.type === 'heartbeat') {
+          continue;
+        }
         if (parsed?.type !== 'result') {
           continue;
         }

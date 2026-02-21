@@ -387,6 +387,21 @@ export async function runLogQLQuery(
       } catch {
         continue;
       }
+      if (payload?.type === 'done' || payload?.type === 'end') {
+        if (Object.keys(seriesMap).length) {
+          flushSeriesInto(frames);
+        }
+        if (!isVolume && timestamps.length > 0) {
+          frames.push(buildLogsFrame());
+        }
+        if (emit && frames.length) {
+          emit(frames);
+        }
+        return frames;
+      }
+      if (payload?.type === 'heartbeat') {
+        continue;
+      }
       if (payload.type !== 'result' || !payload.data) {
         continue;
       }

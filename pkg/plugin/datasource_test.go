@@ -224,6 +224,72 @@ func TestMetricsQueryEmptyResult(t *testing.T) {
 	}
 }
 
+func TestMetricsQueryIgnoresHeartbeatBeforeDuringAndAfterDone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		baseTime := time.Now().Add(-1 * time.Hour).UnixMilli()
+		fmt.Fprintln(w, `data: {"type":"heartbeat"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "data: %s\n\n", fmt.Sprintf(`{"type":"result","data":{"timestamp":%d,"value":10.5,"label":"series1"}}`, baseTime))
+		fmt.Fprintln(w, `data: {"type":"heartbeat"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "data: %s\n\n", fmt.Sprintf(`{"type":"result","data":{"timestamp":%d,"value":20.0,"label":"series1"}}`, baseTime+10000))
+		fmt.Fprintln(w, `data: {"type":"done","data":{"status":"ok"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "data: %s\n\n", fmt.Sprintf(`{"type":"result","data":{"timestamp":%d,"value":999.0,"label":"series1"}}`, baseTime+20000))
+		fmt.Fprintln(w, `data: {"type":"heartbeat"}`)
+		fmt.Fprintln(w)
+	}))
+	defer server.Close()
+
+	ds := Datasource{}
+	queryJSON := `{
+		"mode": "metrics",
+		"metricName": "test_metric",
+		"aggregation": "avg",
+		"groupBy": [],
+		"filters": []
+	}`
+
+	resp, err := ds.QueryData(
+		context.Background(),
+		&backend.QueryDataRequest{
+			PluginContext: backend.PluginContext{
+				DataSourceInstanceSettings: &backend.DataSourceInstanceSettings{
+					JSONData: []byte(fmt.Sprintf(`{"customPath": "%s"}`, server.URL)),
+					DecryptedSecureJSONData: map[string]string{
+						"apiKey": "test-api-key",
+					},
+				},
+			},
+			Queries: []backend.DataQuery{
+				{
+					RefID:         "A",
+					JSON:          []byte(queryJSON),
+					TimeRange:     backend.TimeRange{From: time.Now().Add(-1 * time.Hour), To: time.Now()},
+					MaxDataPoints: 100,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("QueryData failed: %v", err)
+	}
+
+	result := resp.Responses["A"]
+	if result.Error != nil {
+		t.Fatalf("Query returned error: %v", result.Error)
+	}
+	if len(result.Frames) != 1 {
+		t.Fatalf("Expected 1 frame, got %d", len(result.Frames))
+	}
+	if result.Frames[0].Fields[1].Len() != 2 {
+		t.Fatalf("Expected 2 points, got %d", result.Frames[0].Fields[1].Len())
+	}
+}
+
 func TestMetricsQueryWithFilters(t *testing.T) {
 	var capturedQuery string
 
@@ -491,6 +557,73 @@ func TestLogQueryEmptyResult(t *testing.T) {
 	// Empty result should return 0 frames, not an error
 	if len(result.Frames) != 0 {
 		t.Errorf("Expected 0 frames for empty result, got %d", len(result.Frames))
+	}
+}
+
+func TestLogQueryIgnoresHeartbeatBeforeDuringAndAfterDone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+
+		baseTime := time.Now().Add(-1 * time.Hour).UnixMilli()
+		fmt.Fprintln(w, `data: {"type":"heartbeat"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "data: %s\n\n", fmt.Sprintf(`{"type":"result","data":{"timestamp":%d,"value":50,"label":"level=error"}}`, baseTime))
+		fmt.Fprintln(w, `data: {"type":"heartbeat"}`)
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "data: %s\n\n", fmt.Sprintf(`{"type":"result","data":{"timestamp":%d,"value":75,"label":"level=error"}}`, baseTime+60000))
+		fmt.Fprintln(w, `data: {"type":"done","data":{"status":"ok"}}`)
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "data: %s\n\n", fmt.Sprintf(`{"type":"result","data":{"timestamp":%d,"value":999,"label":"level=error"}}`, baseTime+120000))
+		fmt.Fprintln(w, `data: {"type":"heartbeat"}`)
+		fmt.Fprintln(w)
+	}))
+	defer server.Close()
+
+	ds := Datasource{}
+	queryJSON := `{
+		"mode": "logs",
+		"queryText": "alert",
+		"filters": [{"tag": "log_level", "op": "=", "value": ["error"]}],
+		"logqlAggregation": "sum",
+		"valueAs": "count_over_time",
+		"groupBy": ["log_level"]
+	}`
+
+	resp, err := ds.QueryData(
+		context.Background(),
+		&backend.QueryDataRequest{
+			PluginContext: backend.PluginContext{
+				DataSourceInstanceSettings: &backend.DataSourceInstanceSettings{
+					JSONData: []byte(fmt.Sprintf(`{"customPath": "%s"}`, server.URL)),
+					DecryptedSecureJSONData: map[string]string{
+						"apiKey": "test-api-key",
+					},
+				},
+			},
+			Queries: []backend.DataQuery{
+				{
+					RefID:         "A",
+					JSON:          []byte(queryJSON),
+					TimeRange:     backend.TimeRange{From: time.Now().Add(-1 * time.Hour), To: time.Now()},
+					MaxDataPoints: 100,
+				},
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("QueryData failed: %v", err)
+	}
+
+	result := resp.Responses["A"]
+	if result.Error != nil {
+		t.Fatalf("Query returned error: %v", result.Error)
+	}
+	if len(result.Frames) != 1 {
+		t.Fatalf("Expected 1 frame, got %d", len(result.Frames))
+	}
+	if result.Frames[0].Fields[1].Len() != 2 {
+		t.Fatalf("Expected 2 points, got %d", result.Frames[0].Fields[1].Len())
 	}
 }
 
