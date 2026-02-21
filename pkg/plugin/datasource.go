@@ -619,10 +619,10 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 					var parsed struct {
 						Type string `json:"type"`
 						Data struct {
-							Timestamp json.Number `json:"timestamp"`
-							Value     json.Number `json:"value"`
-							Label     string      `json:"label"`
-							Tags  map[string]any `json:"tags"`
+							Timestamp json.Number    `json:"timestamp"`
+							Value     json.Number    `json:"value"`
+							Label     string         `json:"label"`
+							Tags      map[string]any `json:"tags"`
 						} `json:"data"`
 					}
 					if err := json.Unmarshal([]byte(msgStr), &parsed); err != nil {
@@ -636,7 +636,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 
 					if parsed.Type == "done" || parsed.Type == "end" {
 						doneReceived = true
-						continue
+						break
 					}
 					if parsed.Type == "heartbeat" {
 						continue
@@ -833,7 +833,7 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 
 					if parsed.Type == "done" || parsed.Type == "end" {
 						doneReceived = true
-						continue
+						break
 					}
 					if parsed.Type == "heartbeat" {
 						continue
@@ -1029,10 +1029,10 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 					sseSamples++
 				}
 
-				if outer.Type == "done" {
+				if outer.Type == "done" || outer.Type == "end" {
 					log.DefaultLogger.Debug("SSE done message received")
 					doneReceived = true
-					continue
+					break
 				}
 				if outer.Type != "timeseries" {
 					log.DefaultLogger.Debug("SSE skipping non-timeseries message", "type", outer.Type)
