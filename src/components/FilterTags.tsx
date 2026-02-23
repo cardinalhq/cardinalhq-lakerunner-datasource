@@ -20,6 +20,7 @@ import { Filter, Operator } from '../types';
 import { FilterRow } from './FilterRowLogQL';
 import { useTags } from '../hooks/useTagKeys';
 import { promqlFromQueryBuilder } from '../util/MetricsBuilder';
+import { rateWindowForRange } from '../util/rateWindow';
 
 const ERROR_TAG = 'span_status_code';
 const DURATION_TAG = 'span_duration';
@@ -86,9 +87,9 @@ export function FilterBuilder(props: any) {
       filters: stableFilters,
       groupBy: [],
     };
-    const expr = promqlFromQueryBuilder(fakeQuery as any);
+    const expr = promqlFromQueryBuilder(fakeQuery as any, rateWindowForRange(startTime, endTime));
     return expr || undefined;
-  }, [mode, metricName, stableFilters]);
+  }, [mode, metricName, stableFilters, startTime, endTime]);
 
   const { data: internalTags = [], loading: internalLoading } = useTags({
     datasourceId,

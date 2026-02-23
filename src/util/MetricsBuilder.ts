@@ -125,7 +125,7 @@ function isValidPromMetricName(name: string): boolean {
   return /^[a-zA-Z_:][a-zA-Z0-9_:]*$/.test(name);
 }
 
-export function promqlFromQueryBuilder(qb: MyQuery): string {
+export function promqlFromQueryBuilder(qb: MyQuery, rateWindow = '5m'): string {
   const metricName = qb.metricName?.trim();
   const uiType: MyQuery['metricType'] = qb.metricType;
   const groupBys = (qb.groupBy ?? []).map((k) => normalizedLabel(k));
@@ -177,9 +177,9 @@ export function promqlFromQueryBuilder(qb: MyQuery): string {
   if (isCount) {
     let inner = selector;
     if (valueAs === 'rates_per_second') {
-      inner = `rate(${selector}[5m])`;
+      inner = `rate(${selector}[${rateWindow}])`;
     } else if (valueAs === 'count_over_time') {
-      inner = `count_over_time(${selector}[5m])`;
+      inner = `count_over_time(${selector}[${rateWindow}])`;
     } else if (valueAs === 'counts') {
       inner = selector;
     }
@@ -192,9 +192,9 @@ export function promqlFromQueryBuilder(qb: MyQuery): string {
   let inner = selector;
 
   if (valueAs === 'rates_per_second') {
-    inner = `rate(${selector}[5m])`;
+    inner = `rate(${selector}[${rateWindow}])`;
   } else if (valueAs === 'count_over_time') {
-    inner = `count_over_time(${selector}[5m])`;
+    inner = `count_over_time(${selector}[${rateWindow}])`;
   }
 
   if (!hasAgg) {

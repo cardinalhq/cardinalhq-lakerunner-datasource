@@ -31,6 +31,7 @@ import { useTagValues } from '../hooks/useTagValues';
 import { buildLogQLExpressions } from '../util/LogqlBuilder';
 import { withHiddenFingerprint } from '../util/buildFinalLogQL';
 import { promqlFromQueryBuilder } from '../util/MetricsBuilder';
+import { rateWindowForRange } from '../util/rateWindow';
 import { toUserLabel } from '../services/tags';
 
 const MESSAGE_TAG = 'log_message';
@@ -217,7 +218,7 @@ export function FilterRow(props: {
         valueAs: metricValueAs,
         aggregationManuallyDeleted: false,
       };
-      const expr = promqlFromQueryBuilder(fakeQuery);
+      const expr = promqlFromQueryBuilder(fakeQuery, rateWindowForRange(startTime, endTime));
       return expr || undefined;
     }
     return undefined;
@@ -233,6 +234,8 @@ export function FilterRow(props: {
     groupBy,
     metricAggregation,
     metricValueAs,
+    startTime,
+    endTime,
   ]);
 
   const tagOptions = (isMetrics ? tags.filter((t) => t !== MESSAGE_TAG && t !== METRIC_NAME_TAG) : tags).map((t) => ({
