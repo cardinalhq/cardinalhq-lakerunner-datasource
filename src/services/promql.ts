@@ -18,6 +18,18 @@ import { DataFrame, DataQueryRequest, FieldType, toDataFrame } from '@grafana/da
 import { MyQuery } from 'types';
 import { matchesThreshold, SeriesSummary } from '../util/threshold';
 import { colorForSeries } from '../util/seriesColor';
+import { rateWindowForRange } from '../util/rateWindow';
+
+/**
+ * Rewrite all PromQL range-vector windows (e.g. `[5m]`, `[20s]`) to the
+ * window appropriate for the current time range.  This ensures the window
+ * matches the actual query span even when the UI hasn't re-rendered yet.
+ */
+export function applyRateWindow(expr: string, startMs: number, endMs: number): string {
+  const w = rateWindowForRange(startMs, endMs);
+  // Match range-vector selectors: `[<duration>]` where duration is digits + unit
+  return expr.replace(/\[(\d+[smhdwy])\]/g, `[${w}]`);
+}
 
 export function applyLegendFormat(format: string, tags: Record<string, any> | undefined): string | null {
   if (!format) {
@@ -127,12 +139,13 @@ export async function runPromQLQuery(
   const startTime = range.from.valueOf();
   const endTime = range.to.valueOf();
   const threshold = target.valueThreshold;
+  const promql = target.promqlOutput ? applyRateWindow(target.promqlOutput, startTime, endTime) : target.promqlOutput;
 
   // If threshold filtering is enabled, fetch summaries first to determine which series to include
   let allowedLabels: Set<string> | null = null;
-  if (supportsMetricsSummarySSE && threshold?.enabled && target.promqlOutput) {
+  if (supportsMetricsSummarySSE && threshold?.enabled && promql) {
     try {
-      const summaries = await fetchMetricsSummary(dataSourceId, target.promqlOutput, startTime, endTime, signal);
+      const summaries = await fetchMetricsSummary(dataSourceId, promql, startTime, endTime, signal);
       // Filter to only series that match the threshold
       const matchingSummaries = summaries.filter((s) => matchesThreshold(s, threshold));
 
@@ -165,7 +178,7 @@ export async function runPromQLQuery(
       body: {
         s: String(startTime),
         e: String(endTime),
-        q: target.promqlOutput,
+        q: promql,
       },
     }),
     signal,

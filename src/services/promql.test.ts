@@ -19,7 +19,7 @@ jest.mock('@grafana/data', () => ({
   toDataFrame: (frame: any) => frame,
 }));
 
-import { runPromQLQuery, applyLegendFormat } from './promql';
+import { runPromQLQuery, applyLegendFormat, applyRateWindow } from './promql';
 import type { MyQuery } from '../types';
 
 function mockSSEBody(events: string[]) {
@@ -263,5 +263,32 @@ describe('runPromQLQuery legendFormat', () => {
 
     expect(frames).toHaveLength(1);
     expect(frames[0].fields[1].config.displayNameFromDS).toBe('raw-label');
+  });
+});
+
+describe('applyRateWindow', () => {
+  const base = Date.now();
+  const HOUR = 60 * 60_000;
+
+  it('rewrites rate window for a 7-day range', () => {
+    const sevenDays = 7 * 24 * HOUR;
+    expect(applyRateWindow('sum(rate(http_total[5m]))', base, base + sevenDays)).toBe(
+      'sum(rate(http_total[2h]))'
+    );
+  });
+
+  it('rewrites multiple windows in one expression', () => {
+    const sevenDays = 7 * 24 * HOUR;
+    expect(
+      applyRateWindow('rate(a[5m]) / rate(b[1m])', base, base + sevenDays)
+    ).toBe('rate(a[2h]) / rate(b[2h])');
+  });
+
+  it('uses 20s for short ranges', () => {
+    expect(applyRateWindow('rate(x[5m])', base, base + 30 * 60_000)).toBe('rate(x[20s])');
+  });
+
+  it('leaves expressions without range vectors unchanged', () => {
+    expect(applyRateWindow('http_requests_total', base, base + HOUR)).toBe('http_requests_total');
   });
 });
