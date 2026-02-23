@@ -58,17 +58,33 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
+const RATE_WINDOW_RE = /\[(?:\d+(?:\.\d+)?(?:ms|s|m|h|d|w|y))+\]/g;
+
 export function buildSeriesColorKey(name: string, labels?: Record<string, any>): string {
-  const parts = Object.entries(labels ?? {})
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${String(v)}`);
-  return `${name}|${parts.join(',')}`;
+  const entries = Object.entries(labels ?? {});
+  const hasName = labels?.['__name__'] != null;
+  const nonName = entries.filter(([k]) => k !== '__name__');
+
+  // If we have any labels at all (including __name__ alone), build a
+  // stable key from metric identity + dimension tags.  This ensures
+  // query-shape changes (sum→avg, rate window tweaks) never alter the key.
+  if (hasName || nonName.length > 0) {
+    const prefix = labels?.['__name__'] ?? '';
+    const pairs = nonName
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${String(v)}`);
+    return `${prefix}|${pairs.join(',')}`;
+  }
+
+  // Last resort: no labels at all — strip rate windows so time-range
+  // changes don't shift colors.
+  return name.replace(RATE_WINDOW_RE, '');
 }
 
 export function colorForSeries(name: string, labels?: Record<string, any>): string {
   const hash = fnv1a32(buildSeriesColorKey(name, labels));
   const hue = hash % 360;
-  const saturation = 60 + ((hash >> 8) % 20); // 60..79
-  const lightness = 38 + ((hash >> 16) % 14); // 38..51
+  const saturation = 70 + ((hash >> 8) % 21); // 70..90
+  const lightness = 45 + ((hash >> 16) % 16); // 45..60
   return hslToHex(hue, saturation, lightness);
 }
