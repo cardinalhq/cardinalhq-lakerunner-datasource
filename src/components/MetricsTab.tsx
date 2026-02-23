@@ -20,6 +20,7 @@ import { DataSource } from '../datasource';
 import { Filter, MyQuery, Operator, VALUE_THRESHOLD_OPTIONS, ValueThresholdOperator } from '../types';
 import { PrismPromQLEditor } from './PrismEditor';
 import { promqlFromQueryBuilder } from '../util/MetricsBuilder';
+import { rateWindowForRange } from '../util/rateWindow';
 import { FilterBuilder } from './FilterTags';
 import { useMetricNames } from '../hooks/useMetricNames';
 
@@ -71,6 +72,12 @@ export function MetricsTab(props: {
   const [codeDraft, setCodeDraft] = useState<string>(query.promqlOutput ?? '');
   const [lastBuilderExpr, setLastBuilderExpr] = useState<string>('');
 
+  const earlyTimeRange = timeRange || { startTime: query.timeFrom, endTime: query.timeTo };
+  const rateWindow = useMemo(
+    () => rateWindowForRange(earlyTimeRange.startTime, earlyTimeRange.endTime),
+    [earlyTimeRange.startTime, earlyTimeRange.endTime]
+  );
+
   const latestQueryRef = useRef(query);
   useEffect(() => {
     latestQueryRef.current = query;
@@ -78,11 +85,11 @@ export function MetricsTab(props: {
 
   const promqlPreview = useMemo(() => {
     try {
-      return promqlFromQueryBuilder(query);
+      return promqlFromQueryBuilder(query, rateWindow);
     } catch {
       return '';
     }
-  }, [query]);
+  }, [query, rateWindow]);
 
   const prevDsRef = useRef(datasource.id);
 
@@ -155,8 +162,6 @@ export function MetricsTab(props: {
     };
   }, [datasource]);
 
-  const effectiveTimeRange = timeRange || { startTime: query.timeFrom, endTime: query.timeTo };
-
   return (
     <div>
       <div style={{ marginBottom: 8 }}>
@@ -216,7 +221,7 @@ export function MetricsTab(props: {
                     metricType: nextMetricType,
                     aggregation: newAggregation,
                     valueAs: newValueAs,
-                  });
+                  }, rateWindow);
 
                   setLastBuilderExpr(nextExpr);
                   setCodeDraft(nextExpr);
@@ -248,8 +253,8 @@ export function MetricsTab(props: {
             valueAs={query.valueAs}
             onValueAsChange={(v: any) => onChange({ ...query, valueAs: v })}
             onValueAsDelete={() => onChange({ ...query, valueAs: undefined })}
-            startTime={effectiveTimeRange.startTime}
-            endTime={effectiveTimeRange.endTime}
+            startTime={earlyTimeRange.startTime}
+            endTime={earlyTimeRange.endTime}
             mode="metrics"
             metricName={query.metricName}
             metricType={query.metricType}
