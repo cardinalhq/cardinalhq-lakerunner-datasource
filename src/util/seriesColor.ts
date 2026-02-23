@@ -14,7 +14,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-type Labels = Record<string, any> | undefined;
 
 function fnv1a32(input: string): number {
   let hash = 0x811c9dc5;
@@ -59,14 +58,14 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-export function buildSeriesColorKey(name: string, labels?: Labels): string {
+export function buildSeriesColorKey(name: string, labels?: Record<string, any>): string {
   const parts = Object.entries(labels ?? {})
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([k, v]) => `${k}=${String(v)}`);
   return `${name}|${parts.join(',')}`;
 }
 
-export function colorForSeries(name: string, labels?: Labels): string {
+export function colorForSeries(name: string, labels?: Record<string, any>): string {
   const hash = fnv1a32(buildSeriesColorKey(name, labels));
   const hue = hash % 360;
   const saturation = 60 + ((hash >> 8) % 20); // 60..79

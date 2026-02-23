@@ -35,4 +35,15 @@ describe('seriesColor', () => {
     const c2 = colorForSeries('svc-b', { env: 'prod' });
     expect(c1).not.toBe(c2);
   });
+
+  it('builds expected key format', () => {
+    expect(buildSeriesColorKey('svc', { env: 'prod' })).toBe('svc|env=prod');
+    expect(buildSeriesColorKey('svc', { env: 'prod', region: 'us-east-1' })).toBe('svc|env=prod,region=us-east-1');
+    expect(buildSeriesColorKey('my-series')).toBe('my-series|');
+  });
+
+  it('works when labels are undefined', () => {
+    const c = colorForSeries('my-series');
+    expect(c).toMatch(/^#[0-9a-f]{6}$/);
+  });
 });

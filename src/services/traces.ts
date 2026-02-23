@@ -18,7 +18,6 @@ import { DataFrame, FieldType, toDataFrame, DataQueryRequest } from '@grafana/da
 import { toInternalLabel } from '../services/tags';
 import { Filter, MyQuery } from '../types';
 import { buildLogQLPlans } from 'util/LogqlBuilder';
-import { colorForSeries } from '../util/seriesColor';
 
 const DEFAULT_SELECTOR = '{resource_service_name=~".+"}';
 const ensureStreamSelector = (expr: string): string => {
@@ -492,7 +491,7 @@ export async function runTracesQuery(
             name: 'Value',
             type: FieldType.number,
             values: series.values.slice(),
-            config: { displayNameFromDS: label, color: { mode: 'fixed', fixedColor: colorForSeries(label) } },
+            config: { displayNameFromDS: label },
           },
         ],
       });
@@ -572,12 +571,7 @@ export async function runTracesQuery(
       name: label,
       fields: [
         { name: 'Time', type: FieldType.time, values: series.timestamps.slice() },
-        {
-          name: 'Value',
-          type: FieldType.number,
-          values: series.values.slice(),
-          config: { displayNameFromDS: label, color: { mode: 'fixed', fixedColor: colorForSeries(label) } },
-        },
+        { name: 'Value', type: FieldType.number, values: series.values.slice(), config: { displayNameFromDS: label } },
       ],
     });
     (frame.meta as any) = { preferredVisualisationType: 'graph' };

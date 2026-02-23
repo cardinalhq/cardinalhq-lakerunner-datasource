@@ -238,7 +238,6 @@ export async function runLogQLQuery(
       const fixedColor = levelStr ? levelColors[levelStr.toLowerCase()] : undefined;
       const pretty = prettyLabel(name);
       const fieldLabels = levelStr ? { ...lab, level: levelStr } : lab;
-      const stableColor = colorForSeries(name, lab);
       const frame = toDataFrame({
         refId: target.refId,
         name: pretty,
@@ -251,7 +250,7 @@ export async function runLogQLQuery(
             labels: fieldLabels as any,
             config: {
               displayNameFromDS: pretty,
-              color: { mode: 'fixed', fixedColor: fixedColor ?? stableColor },
+              color: { mode: 'fixed', fixedColor: fixedColor ?? colorForSeries(name, lab) },
             },
           },
         ],
