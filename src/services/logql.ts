@@ -17,6 +17,7 @@
 import { DataFrame, DataQueryRequest, DataFrameType, FieldType, toDataFrame } from '@grafana/data';
 import { withHiddenFingerprint } from '../util/buildFinalLogQL';
 import { buildLogQLPlans } from 'util/LogqlBuilder';
+import { colorForSeries } from '../util/seriesColor';
 
 const norm = (t: string) => t.replace(/\./g, '_');
 const LEVEL_INTERNAL = norm('log_level');
@@ -249,7 +250,7 @@ export async function runLogQLQuery(
             labels: fieldLabels as any,
             config: {
               displayNameFromDS: pretty,
-              ...(fixedColor ? { color: { mode: 'fixed', fixedColor } } : { color: { mode: 'palette-classic' } }),
+              color: { mode: 'fixed', fixedColor: fixedColor ?? colorForSeries(name, lab) },
             },
           },
         ],
