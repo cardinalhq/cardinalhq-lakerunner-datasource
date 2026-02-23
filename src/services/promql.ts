@@ -17,6 +17,7 @@
 import { DataFrame, DataQueryRequest, FieldType, toDataFrame } from '@grafana/data';
 import { MyQuery } from 'types';
 import { matchesThreshold, SeriesSummary } from '../util/threshold';
+import { colorForSeries } from '../util/seriesColor';
 
 export function applyLegendFormat(format: string, tags: Record<string, any> | undefined): string | null {
   if (!format) {
@@ -210,6 +211,7 @@ export async function runPromQLQuery(
             labels: series.tags ?? undefined,
             config: {
               displayNameFromDS: displayName,
+              color: { mode: 'fixed', fixedColor: colorForSeries(label, series.tags) },
             },
           },
         ],
