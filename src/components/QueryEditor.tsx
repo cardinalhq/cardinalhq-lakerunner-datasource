@@ -25,7 +25,7 @@ import TracesTab from './Traces';
 
 type Mode = 'logs' | 'metrics' | 'traces';
 
-const SERVICE_NAME_TAG = 'resource_service_name';
+const SERVICE_NAME_TAG = 'service_name';
 const DEFAULT_LOGS_FILTER = { tag: SERVICE_NAME_TAG, op: '=' as any, value: [''] };
 
 const hasValidFilterValues = (filters: Filter[]): boolean => {

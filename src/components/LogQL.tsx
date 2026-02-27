@@ -38,8 +38,8 @@ interface Props {
 
 const HIDDEN_TAGS = new Set<string>(['fingerprint', 'chq_fingerprint', '_cardinalhq_fingerprint']);
 const isHiddenTag = (t?: string) => !!t && HIDDEN_TAGS.has(t.replace(/^"|"$/g, ''));
-const MESSAGE_TAG = 'log_message';
-const SERVICE_NAME_TAG = 'resource_service_name';
+const MESSAGE_TAG = 'message';
+const SERVICE_NAME_TAG = 'service_name';
 
 export function LogQLTab({
   datasourceId,

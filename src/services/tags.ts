@@ -17,33 +17,19 @@
 type Mode = 'logs' | 'metrics' | 'traces';
 
 export function displayTagName(tag: string): string {
-  if (tag === 'span_duration') {
-    return 'span_duration';
-  }
   return tag;
 }
 
 export function queryTagName(tag: string): string {
-  if (tag === 'span.duration') {
-    return 'span_duration';
-  }
-  return tag;
+  return tag.replace(/\./g, '_');
 }
-const USER_LABEL_TO_INTERNAL: Record<string, string> = {
-  message: 'log_message',
-  level: 'log_level',
-};
 
-const INTERNAL_LABEL_TO_USER: Record<string, string> = {
-  log_message: 'message',
-  log_level: 'level',
-};
 export function toInternalLabel(label: string): string {
-  return USER_LABEL_TO_INTERNAL[label] || label;
+  return label;
 }
 
 export function toUserLabel(label: string): string {
-  return INTERNAL_LABEL_TO_USER[label] || label;
+  return label;
 }
 
 export async function fetchTags(opts: {
@@ -92,7 +78,7 @@ export async function fetchTags(opts: {
     const tags = Array.isArray(data) ? data : Array.isArray((data as any).tags) ? (data as any).tags : [];
 
     return tags
-      .filter((t: string) => !(t.startsWith('_cardinalhq_') || t.startsWith('chq_')) || t in INTERNAL_LABEL_TO_USER)
+      .filter((t: string) => !(t.startsWith('_cardinalhq_') || t.startsWith('chq_')))
       .map(displayTagName);
   } finally {
     setIsWaiting?.(false);

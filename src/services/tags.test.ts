@@ -29,39 +29,28 @@ describe('tags service', () => {
   });
 
   describe('queryTagName', () => {
-    it('converts span.duration to span_duration', () => {
+    it('normalizes dots to underscores', () => {
       expect(queryTagName('span.duration')).toBe('span_duration');
+      expect(queryTagName('service.name')).toBe('service_name');
     });
 
-    it('returns other tags unchanged', () => {
+    it('returns underscore tags unchanged', () => {
       expect(queryTagName('service_name')).toBe('service_name');
     });
   });
 
   describe('toInternalLabel', () => {
-    it('converts message to log_message', () => {
-      expect(toInternalLabel('message')).toBe('log_message');
-    });
-
-    it('converts level to log_level', () => {
-      expect(toInternalLabel('level')).toBe('log_level');
-    });
-
-    it('returns other labels unchanged', () => {
+    it('returns all labels unchanged (identity)', () => {
+      expect(toInternalLabel('message')).toBe('message');
+      expect(toInternalLabel('level')).toBe('level');
       expect(toInternalLabel('service_name')).toBe('service_name');
     });
   });
 
   describe('toUserLabel', () => {
-    it('converts log_message to message', () => {
-      expect(toUserLabel('log_message')).toBe('message');
-    });
-
-    it('converts log_level to level', () => {
-      expect(toUserLabel('log_level')).toBe('level');
-    });
-
-    it('returns other labels unchanged', () => {
+    it('returns all labels unchanged (identity)', () => {
+      expect(toUserLabel('log_message')).toBe('log_message');
+      expect(toUserLabel('log_level')).toBe('log_level');
       expect(toUserLabel('service_name')).toBe('service_name');
     });
   });

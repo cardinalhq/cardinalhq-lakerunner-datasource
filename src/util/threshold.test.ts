@@ -16,11 +16,11 @@
 
 import { matchesThreshold, SeriesSummary, ValueThreshold } from './threshold';
 
-// Real summary data from sum by (resource_service_name)(rate(calls[5m])) query
+// Real summary data from sum by (service_name)(rate(calls[5m])) query
 const SAMPLE_SUMMARIES: SeriesSummary[] = [
   {
-    label: 'sum by (resource_service_name)(rate(calls{resource_service_name=currencyservice}[5m]))',
-    tags: { name: 'calls', resource_service_name: 'currencyservice' },
+    label: 'sum by (service_name)(rate(calls{service_name=currencyservice}[5m]))',
+    tags: { name: 'calls', service_name: 'currencyservice' },
     min: 4.1811079292533595,
     max: 6.394710921526685,
     avg: 5.382724722723641,
@@ -32,8 +32,8 @@ const SAMPLE_SUMMARIES: SeriesSummary[] = [
     p99: 0,
   },
   {
-    label: 'sum by (resource_service_name)(rate(calls{resource_service_name=flagd}[5m]))',
-    tags: { name: 'calls', resource_service_name: 'flagd' },
+    label: 'sum by (service_name)(rate(calls{service_name=flagd}[5m]))',
+    tags: { name: 'calls', service_name: 'flagd' },
     min: 0.2630220481287287,
     max: 18.645886260691476,
     avg: 12.79573528655097,
@@ -45,8 +45,8 @@ const SAMPLE_SUMMARIES: SeriesSummary[] = [
     p99: 0,
   },
   {
-    label: 'sum by (resource_service_name)(rate(calls{resource_service_name=frontend}[5m]))',
-    tags: { name: 'calls', resource_service_name: 'frontend' },
+    label: 'sum by (service_name)(rate(calls{service_name=frontend}[5m]))',
+    tags: { name: 'calls', service_name: 'frontend' },
     min: 72.5337204683227,
     max: 112.29705322273604,
     avg: 94.98994087507637,
@@ -58,8 +58,8 @@ const SAMPLE_SUMMARIES: SeriesSummary[] = [
     p99: 0,
   },
   {
-    label: 'sum by (resource_service_name)(rate(calls{resource_service_name=frontendproxy}[5m]))',
-    tags: { name: 'calls', resource_service_name: 'frontendproxy' },
+    label: 'sum by (service_name)(rate(calls{service_name=frontendproxy}[5m]))',
+    tags: { name: 'calls', service_name: 'frontendproxy' },
     min: 92.67599745004614,
     max: 147.26259511239653,
     avg: 122.54247722049513,
@@ -71,8 +71,8 @@ const SAMPLE_SUMMARIES: SeriesSummary[] = [
     p99: 0,
   },
   {
-    label: 'sum by (resource_service_name)(rate(calls{resource_service_name=quoteservice}[5m]))',
-    tags: { name: 'calls', resource_service_name: 'quoteservice' },
+    label: 'sum by (service_name)(rate(calls{service_name=quoteservice}[5m]))',
+    tags: { name: 'calls', service_name: 'quoteservice' },
     min: 0.10174199760102882,
     max: 0.24415176204290162,
     avg: 0.15983098409341534,
@@ -165,7 +165,7 @@ describe('matchesThreshold', () => {
       const filtered = SAMPLE_SUMMARIES.filter((s) => matchesThreshold(s, threshold));
 
       expect(filtered).toHaveLength(2);
-      expect(filtered.map((s) => s.tags.resource_service_name)).toEqual(['frontend', 'frontendproxy']);
+      expect(filtered.map((s) => s.tags.service_name)).toEqual(['frontend', 'frontendproxy']);
     });
 
     it('filters to only low-traffic services (max < 1)', () => {
@@ -173,7 +173,7 @@ describe('matchesThreshold', () => {
       const filtered = SAMPLE_SUMMARIES.filter((s) => matchesThreshold(s, threshold));
 
       expect(filtered).toHaveLength(1);
-      expect(filtered[0].tags.resource_service_name).toBe('quoteservice');
+      expect(filtered[0].tags.service_name).toBe('quoteservice');
     });
 
     it('returns all services when threshold is very low', () => {

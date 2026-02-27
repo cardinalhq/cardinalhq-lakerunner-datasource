@@ -48,3 +48,6 @@ bin/
 .DS_Store
 cardinalhq-lakerunner-datasource
 cardinalhq-lakerunner-datasource*.zip
+
+# Plans (scratch work)
+docs/plans/

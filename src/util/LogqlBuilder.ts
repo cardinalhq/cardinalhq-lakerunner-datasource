@@ -25,9 +25,9 @@ const normalizeWindow = (w: string) => (w === '__interval' ? '$__interval' : w);
 
 const HIDDEN_TAGS = new Set(['fingerprint', 'chq_fingerprint', '_cardinalhq_fingerprint']);
 const isHiddenTag = (tag: string) => HIDDEN_TAGS.has(tag);
-const MESSAGE_TAGS = new Set(['log_message']);
+const MESSAGE_TAGS = new Set(['message']);
 
-const NUMERIC_AFTER_SELECTOR = new Set(['span_duration', 'span_duration']);
+const NUMERIC_AFTER_SELECTOR = new Set(['duration']);
 const isComparisonOp = (op?: Operator) => op === '<' || op === '<=' || op === '>' || op === '>=';
 
 function parseDurationToMs(v?: string): number | null {

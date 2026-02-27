@@ -141,7 +141,7 @@ describe('runPromQLQuery legendFormat', () => {
       ok: true,
       status: 200,
       body: mockSSEBody([
-        'data: {"type":"result","data":{"timestamp":1000,"label":"raw-label","value":42,"tags":{"resource_service_name":"frontend","__name__":"http_duration"}}}\n',
+        'data: {"type":"result","data":{"timestamp":1000,"label":"raw-label","value":42,"tags":{"service_name":"frontend","__name__":"http_duration"}}}\n',
       ]),
       text: async () => '',
     } as any);
@@ -151,7 +151,7 @@ describe('runPromQLQuery legendFormat', () => {
       mode: 'metrics',
       aggregationManuallyDeleted: null,
       promqlOutput: 'some_metric',
-      legendFormat: '{{resource_service_name}}',
+      legendFormat: '{{service_name}}',
     };
 
     const frames = await runPromQLQuery(
@@ -164,7 +164,7 @@ describe('runPromQLQuery legendFormat', () => {
     expect(frames).toHaveLength(1);
     expect(frames[0].fields[1].config.displayNameFromDS).toBe('frontend');
     expect(frames[0].fields[1].labels).toEqual({
-      resource_service_name: 'frontend',
+      service_name: 'frontend',
       __name__: 'http_duration',
     });
   });
@@ -251,7 +251,7 @@ describe('runPromQLQuery legendFormat', () => {
       mode: 'metrics',
       aggregationManuallyDeleted: null,
       promqlOutput: 'metric',
-      legendFormat: '{{resource_service_name}}',
+      legendFormat: '{{service_name}}',
     };
 
     const frames = await runPromQLQuery(

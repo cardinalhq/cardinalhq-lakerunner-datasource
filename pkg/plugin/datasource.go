@@ -82,15 +82,7 @@ type uiFilter struct {
 	Computed  bool     `json:"computed,omitempty"`
 }
 
-var userLabelToInternal = map[string]string{
-	"message": "log_message",
-	"level":   "log_level",
-}
-
 func mapToInternalLabel(label string) string {
-	if v, ok := userLabelToInternal[label]; ok {
-		return v
-	}
 	return label
 }
 
@@ -302,8 +294,8 @@ func buildLogQL(qm queryModel, window string) string {
 			first = vals[0]
 		}
 
-		// Handle log_message as line filter instead of label matcher
-		if tag == "log_message" || tag == "message" {
+		// Handle message as line filter instead of label matcher
+		if tag == "message" {
 			if first != "" {
 				switch f.Op {
 				case "contains":
@@ -919,18 +911,12 @@ func (d *Datasource) query(ctx context.Context, pCtx backend.PluginContext, quer
 	groupBys := make([]string, 0, len(qm.GroupBy))
 	for _, g := range qm.GroupBy {
 		gt := strings.TrimSpace(g)
-		if gt == "" {
-			continue
-		}
-		switch gt {
-		case "message", "level":
-			groupBys = append(groupBys, mapToInternalLabel(gt))
-		default:
+		if gt != "" {
 			groupBys = append(groupBys, gt)
 		}
 	}
 	if isLogsVolume && len(groupBys) == 0 {
-		groupBys = []string{"log_level"}
+		groupBys = []string{"level"}
 	}
 
 	agg := firstNonEmpty(qm.Aggregation, "sum")

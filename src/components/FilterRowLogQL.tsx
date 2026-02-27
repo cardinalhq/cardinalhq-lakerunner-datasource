@@ -34,9 +34,9 @@ import { promqlFromQueryBuilder } from '../util/MetricsBuilder';
 import { rateWindowForRange } from '../util/rateWindow';
 import { toUserLabel } from '../services/tags';
 
-const MESSAGE_TAG = 'log_message';
+const MESSAGE_TAG = 'message';
 const METRIC_NAME_TAG = '_cardinalhq_name';
-const DURATION_TAG = 'span_duration';
+const DURATION_TAG = 'duration';
 const VALUE_AS_OPTIONS_LOGS_BASE = VALUE_AS_OPTIONS.filter((o) => o.value !== 'values' && o.value !== 'counts');
 type Mode = 'logs' | 'metrics' | 'traces';
 
@@ -112,7 +112,7 @@ export function FilterRow(props: {
   const isTraces = mode === 'traces';
   const isLogsLike = isLogs || isTraces;
 
-  const isDurationTag = filter.tag === DURATION_TAG || filter.tag === 'span_duration';
+  const isDurationTag = filter.tag === DURATION_TAG;
   const isNumericTag = !!filter.tag && isDurationTag;
   const isMessageTag = isLogs && filter.tag === MESSAGE_TAG;
   const isTextOperator = TEXT_OPERATORS.includes(filter.op);
@@ -359,7 +359,7 @@ export function FilterRow(props: {
             value={filter.tag ?? null}
             onChange={(v) => {
               const nextTag = v?.value ?? '';
-              if (isLogs && nextTag === 'log_message') {
+              if (isLogs && nextTag === 'message') {
                 onUpdate(index, { tag: nextTag, op: 'contains' as Operator, value: [''] });
               } else {
                 onUpdate(index, { tag: nextTag });

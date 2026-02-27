@@ -41,7 +41,7 @@ const isHiddenTag = (t?: string) => !!t && HIDDEN_TAGS.has(t.replace(/^"|"$/g, '
 const getSelectedTraceId = (filters: Filter[]) =>
   filters.find(
     (f) =>
-      toInternalLabel(f.tag) === 'span_trace_id' &&
+      toInternalLabel(f.tag) === 'trace_id' &&
       f.op === '=' &&
       Array.isArray(f.value) &&
       f.value.length === 1 &&

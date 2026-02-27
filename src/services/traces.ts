@@ -19,7 +19,7 @@ import { toInternalLabel } from '../services/tags';
 import { Filter, MyQuery } from '../types';
 import { buildLogQLPlans } from 'util/LogqlBuilder';
 
-const DEFAULT_SELECTOR = '{resource_service_name=~".+"}';
+const DEFAULT_SELECTOR = '{service_name=~".+"}';
 const ensureStreamSelector = (expr: string): string => {
   const trimmed = (expr ?? '').trim();
   if (!trimmed) {
@@ -53,35 +53,28 @@ const buildFilterExpr = (target: MyQuery, intervalToken: string): string => {
 };
 
 const isInternal = (k: string) => k.startsWith('_cardinalhq');
-const isResource = (k: string) => k.startsWith('resource_');
 const toKVs = (obj: Record<string, any>) => Object.entries(obj ?? {}).map(([key, value]) => ({ key, value }));
-const splitTags = (all: Record<string, any>) => {
-  const kvs = toKVs(all).filter(({ key }) => !isInternal(key));
-  const resourceTags = kvs.filter(({ key }) => isResource(key));
-  const spanTags = kvs.filter(({ key }) => !isResource(key));
-  return { spanTags, resourceTags };
-};
 
 type SpanEvent = { timestamp: number; name: string; fields: Array<{ key: string; value: any }> };
 
-const getTraceId = (tags: Record<string, any>): string => String(tags['span_trace_id'] ?? '');
-const getSpanId = (tags: Record<string, any>): string => String(tags['span.span_id'] ?? tags['span_id'] ?? '');
-const getParentSpanId = (tags: Record<string, any>): string => String(tags['span_parent_span_id'] ?? '');
+const getTraceId = (tags: Record<string, any>): string => String(tags['trace_id'] ?? '');
+const getSpanId = (tags: Record<string, any>): string => String(tags['span.id'] ?? tags['id'] ?? '');
+const getParentSpanId = (tags: Record<string, any>): string => String(tags['parent_span_id'] ?? '');
 const getStartTs = (tags: Record<string, any>, fallbackTs: number): number =>
-  Number(tags['span_start_timestamp'] ?? fallbackTs);
+  Number(tags['start_timestamp'] ?? fallbackTs);
 const getDurationMs = (tags: Record<string, any>): number => {
-  const raw = tags['span_duration'];
+  const raw = tags['duration'];
   const n = Number(raw);
   return Number.isFinite(n) ? Math.max(1, Math.round(n)) : 1;
 };
-const getServiceName = (tags: Record<string, any>): string => String(tags['resource_service_name'] ?? '');
+const getServiceName = (tags: Record<string, any>): string => String(tags['service_name'] ?? '');
 const getOperationName = (tags: Record<string, any>): string =>
-  String(tags['span_name'] ?? tags['_cardinalhq_name'] ?? '');
+  String(tags['name'] ?? tags['_cardinalhq_name'] ?? '');
 
 const getSelectedTraceId = (filters: Filter[]) =>
   filters.find(
     (f) =>
-      toInternalLabel(f.tag) === 'span_trace_id' &&
+      toInternalLabel(f.tag) === 'trace_id' &&
       f.op === '=' &&
       Array.isArray(f.value) &&
       f.value.length === 1 &&
@@ -89,7 +82,7 @@ const getSelectedTraceId = (filters: Filter[]) =>
   )?.value?.[0];
 
 const getSpanEvents = (tags: Record<string, any>): SpanEvent[] => {
-  const raw = tags['span_events'];
+  const raw = tags['events'];
   let events: any[] = [];
   if (raw) {
     try {
@@ -171,7 +164,7 @@ function buildTraceTableFrame(
                   refId: 'A',
                   mode: 'traces',
                   queryType: 'traceql',
-                  filters: [{ tag: 'span_trace_id', op: '=', value: ['${__data.fields.traceID}'] }],
+                  filters: [{ tag: 'trace_id', op: '=', value: ['${__data.fields.traceID}'] }],
                   groupBy: [],
                 },
                 panelsState: { trace: { spanId: '${__value.raw}' } },
@@ -202,7 +195,7 @@ function buildTraceTableFrame(
 }
 
 function getHasError(tags: Record<string, any>): boolean {
-  const v = tags['span_status_code'];
+  const v = tags['status_code'];
 
   if (v == null) {
     return false;
@@ -242,7 +235,8 @@ function buildTraceWaterfallFrame(
     const svc = getServiceName(tags);
     const op = getOperationName(tags);
     const durMs = getDurationMs(tags);
-    const { spanTags, resourceTags } = splitTags(tags);
+    const spanTags = toKVs(tags).filter(({ key }) => !isInternal(key));
+    const resourceTags: Array<{ key: string; value: any }> = [];
     let statusCode = 1;
     let statusMessage = '';
     if (getHasError(tags)) {
