@@ -16,20 +16,8 @@
 
 type Mode = 'logs' | 'metrics' | 'traces';
 
-export function displayTagName(tag: string): string {
-  return tag;
-}
-
 export function queryTagName(tag: string): string {
   return tag.replace(/\./g, '_');
-}
-
-export function toInternalLabel(label: string): string {
-  return label;
-}
-
-export function toUserLabel(label: string): string {
-  return label;
 }
 
 export async function fetchTags(opts: {
@@ -78,8 +66,7 @@ export async function fetchTags(opts: {
     const tags = Array.isArray(data) ? data : Array.isArray((data as any).tags) ? (data as any).tags : [];
 
     return tags
-      .filter((t: string) => !(t.startsWith('_cardinalhq_') || t.startsWith('chq_')))
-      .map(displayTagName);
+      .filter((t: string) => !(t.startsWith('_cardinalhq_') || t.startsWith('chq_')));
   } finally {
     setIsWaiting?.(false);
   }

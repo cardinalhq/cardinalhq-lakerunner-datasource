@@ -19,7 +19,7 @@ import { withHiddenFingerprint } from '../util/buildFinalLogQL';
 import { buildLogQLPlans } from 'util/LogqlBuilder';
 import { colorForSeries } from '../util/seriesColor';
 
-const LEVEL_INTERNAL = 'level';
+const LEVEL_FIELD = 'level';
 
 const replaceInterval = (expr: string, window: string) => expr.replace(/\[\s*\$?__interval\s*\]/g, `[${window}]`);
 
@@ -33,7 +33,7 @@ function ensureByLevel(expr: string): string {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  const want = [LEVEL_INTERNAL];
+  const want = [LEVEL_FIELD];
   const next = Array.from(new Set([...byList, ...want]));
   return `${agg} by (${next.join(',')})(${m[3]})`;
 }
@@ -271,11 +271,11 @@ export async function runLogQLQuery(
       }
     };
 
-    const MSG_TAGS = new Set(['message']);
+    const MSG_TAG = 'message';
 
     for (const f of Array.isArray(tgt?.filters) ? tgt.filters : []) {
       const tag = String(f?.tag ?? '');
-      if (!MSG_TAGS.has(tag)) {
+      if (tag !== MSG_TAG) {
         continue;
       }
 

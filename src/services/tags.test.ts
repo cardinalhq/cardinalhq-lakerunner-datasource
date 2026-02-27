@@ -14,44 +14,18 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import { displayTagName, toInternalLabel, toUserLabel, queryTagName } from './tags';
+import { queryTagName } from './tags';
 
 describe('tags service', () => {
-  describe('displayTagName', () => {
-    it('returns span_duration unchanged', () => {
-      expect(displayTagName('span_duration')).toBe('span_duration');
-    });
-
-    it('returns other tags unchanged', () => {
-      expect(displayTagName('service_name')).toBe('service_name');
-      expect(displayTagName('http_method')).toBe('http_method');
-    });
-  });
-
   describe('queryTagName', () => {
     it('normalizes dots to underscores', () => {
-      expect(queryTagName('span.duration')).toBe('span_duration');
+      expect(queryTagName('http.method')).toBe('http_method');
       expect(queryTagName('service.name')).toBe('service_name');
     });
 
     it('returns underscore tags unchanged', () => {
       expect(queryTagName('service_name')).toBe('service_name');
-    });
-  });
-
-  describe('toInternalLabel', () => {
-    it('returns all labels unchanged (identity)', () => {
-      expect(toInternalLabel('message')).toBe('message');
-      expect(toInternalLabel('level')).toBe('level');
-      expect(toInternalLabel('service_name')).toBe('service_name');
-    });
-  });
-
-  describe('toUserLabel', () => {
-    it('returns all labels unchanged (identity)', () => {
-      expect(toUserLabel('log_message')).toBe('log_message');
-      expect(toUserLabel('log_level')).toBe('log_level');
-      expect(toUserLabel('service_name')).toBe('service_name');
+      expect(queryTagName('duration')).toBe('duration');
     });
   });
 });

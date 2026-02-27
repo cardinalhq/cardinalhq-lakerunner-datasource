@@ -82,9 +82,6 @@ type uiFilter struct {
 	Computed  bool     `json:"computed,omitempty"`
 }
 
-func mapToInternalLabel(label string) string {
-	return label
-}
 
 func cleanFilters(in []uiFilter) []uiFilter {
 	out := make([]uiFilter, 0, len(in))
@@ -430,7 +427,7 @@ func convertOpTS(op string) string {
 
 func convertFilterTS(f uiFilter) map[string]interface{} {
 	return map[string]interface{}{
-		"k":         mapToInternalLabel(f.Tag),
+		"k":         f.Tag,
 		"v":         f.Value,
 		"op":        convertOpTS(f.Op),
 		"dataType":  firstNonEmpty(f.DataType, "string"),

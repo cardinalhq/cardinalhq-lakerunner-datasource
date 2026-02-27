@@ -32,7 +32,6 @@ import { buildLogQLExpressions } from '../util/LogqlBuilder';
 import { withHiddenFingerprint } from '../util/buildFinalLogQL';
 import { promqlFromQueryBuilder } from '../util/MetricsBuilder';
 import { rateWindowForRange } from '../util/rateWindow';
-import { toUserLabel } from '../services/tags';
 
 const MESSAGE_TAG = 'message';
 const METRIC_NAME_TAG = '_cardinalhq_name';
@@ -239,7 +238,7 @@ export function FilterRow(props: {
   ]);
 
   const tagOptions = (isMetrics ? tags.filter((t) => t !== MESSAGE_TAG && t !== METRIC_NAME_TAG) : tags).map((t) => ({
-    label: toUserLabel(t),
+    label: t,
     value: t,
   }));
 

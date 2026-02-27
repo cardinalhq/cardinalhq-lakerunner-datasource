@@ -15,7 +15,6 @@
  */
 
 import { DataFrame, FieldType, toDataFrame, DataQueryRequest } from '@grafana/data';
-import { toInternalLabel } from '../services/tags';
 import { Filter, MyQuery } from '../types';
 import { buildLogQLPlans } from 'util/LogqlBuilder';
 
@@ -57,24 +56,24 @@ const toKVs = (obj: Record<string, any>) => Object.entries(obj ?? {}).map(([key,
 
 type SpanEvent = { timestamp: number; name: string; fields: Array<{ key: string; value: any }> };
 
-const getTraceId = (tags: Record<string, any>): string => String(tags['trace_id'] ?? '');
-const getSpanId = (tags: Record<string, any>): string => String(tags['span.id'] ?? tags['id'] ?? '');
-const getParentSpanId = (tags: Record<string, any>): string => String(tags['parent_span_id'] ?? '');
-const getStartTs = (tags: Record<string, any>, fallbackTs: number): number =>
+export const getTraceId = (tags: Record<string, any>): string => String(tags['trace_id'] ?? '');
+export const getSpanId = (tags: Record<string, any>): string => String(tags['id'] ?? '');
+export const getParentSpanId = (tags: Record<string, any>): string => String(tags['parent_span_id'] ?? '');
+export const getStartTs = (tags: Record<string, any>, fallbackTs: number): number =>
   Number(tags['start_timestamp'] ?? fallbackTs);
-const getDurationMs = (tags: Record<string, any>): number => {
+export const getDurationMs = (tags: Record<string, any>): number => {
   const raw = tags['duration'];
   const n = Number(raw);
   return Number.isFinite(n) ? Math.max(1, Math.round(n)) : 1;
 };
-const getServiceName = (tags: Record<string, any>): string => String(tags['service_name'] ?? '');
-const getOperationName = (tags: Record<string, any>): string =>
+export const getServiceName = (tags: Record<string, any>): string => String(tags['service_name'] ?? '');
+export const getOperationName = (tags: Record<string, any>): string =>
   String(tags['name'] ?? tags['_cardinalhq_name'] ?? '');
 
-const getSelectedTraceId = (filters: Filter[]) =>
+export const getSelectedTraceId = (filters: Filter[]) =>
   filters.find(
     (f) =>
-      toInternalLabel(f.tag) === 'trace_id' &&
+      f.tag === 'trace_id' &&
       f.op === '=' &&
       Array.isArray(f.value) &&
       f.value.length === 1 &&
@@ -236,6 +235,8 @@ function buildTraceWaterfallFrame(
     const op = getOperationName(tags);
     const durMs = getDurationMs(tags);
     const spanTags = toKVs(tags).filter(({ key }) => !isInternal(key));
+    // With flat attribute names, resource vs span tags are no longer distinguishable.
+    // Grafana's trace panel requires the serviceTags field, so we pass an empty array.
     const resourceTags: Array<{ key: string; value: any }> = [];
     let statusCode = 1;
     let statusMessage = '';

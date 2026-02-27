@@ -21,7 +21,6 @@ import { useTags } from '../hooks/useTagKeys';
 import { PrismPromQLEditor } from './PrismEditor';
 import { buildLogQLFromQueryRaw, buildLogQLFromQueryRawForUI, buildLogQLExpressions } from '../util/LogqlBuilder';
 import { DataSource } from '../datasource';
-import { toInternalLabel } from '../services/tags';
 import { withHiddenFingerprint } from '../util/buildFinalLogQL';
 import { FilterBuilder } from './FilterTags';
 
@@ -194,7 +193,6 @@ export function LogQLTab({
     const extracted = (query.extractor?.fields ?? [])
       .map((f: any) => (typeof f === 'string' ? f : f?.name))
       .filter((n): n is string => !!n && !n.startsWith('var_'))
-      .map(toInternalLabel)
       .filter((t) => !isHiddenTag(t));
     return Array.from(new Set([...baseTags, ...extracted]));
   }, [tags, query.extractor?.fields]);
