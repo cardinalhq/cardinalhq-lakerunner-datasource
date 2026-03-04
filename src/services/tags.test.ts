@@ -14,55 +14,18 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import { displayTagName, toInternalLabel, toUserLabel, queryTagName } from './tags';
+import { queryTagName } from './tags';
 
 describe('tags service', () => {
-  describe('displayTagName', () => {
-    it('returns span_duration unchanged', () => {
-      expect(displayTagName('span_duration')).toBe('span_duration');
-    });
-
-    it('returns other tags unchanged', () => {
-      expect(displayTagName('service_name')).toBe('service_name');
-      expect(displayTagName('http_method')).toBe('http_method');
-    });
-  });
-
   describe('queryTagName', () => {
-    it('converts span.duration to span_duration', () => {
-      expect(queryTagName('span.duration')).toBe('span_duration');
+    it('normalizes dots to underscores', () => {
+      expect(queryTagName('http.method')).toBe('http_method');
+      expect(queryTagName('service.name')).toBe('service_name');
     });
 
-    it('returns other tags unchanged', () => {
+    it('returns underscore tags unchanged', () => {
       expect(queryTagName('service_name')).toBe('service_name');
-    });
-  });
-
-  describe('toInternalLabel', () => {
-    it('converts message to log_message', () => {
-      expect(toInternalLabel('message')).toBe('log_message');
-    });
-
-    it('converts level to log_level', () => {
-      expect(toInternalLabel('level')).toBe('log_level');
-    });
-
-    it('returns other labels unchanged', () => {
-      expect(toInternalLabel('service_name')).toBe('service_name');
-    });
-  });
-
-  describe('toUserLabel', () => {
-    it('converts log_message to message', () => {
-      expect(toUserLabel('log_message')).toBe('message');
-    });
-
-    it('converts log_level to level', () => {
-      expect(toUserLabel('log_level')).toBe('level');
-    });
-
-    it('returns other labels unchanged', () => {
-      expect(toUserLabel('service_name')).toBe('service_name');
+      expect(queryTagName('duration')).toBe('duration');
     });
   });
 });

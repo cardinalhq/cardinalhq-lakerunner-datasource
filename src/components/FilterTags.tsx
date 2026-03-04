@@ -22,8 +22,8 @@ import { useTags } from '../hooks/useTagKeys';
 import { promqlFromQueryBuilder } from '../util/MetricsBuilder';
 import { rateWindowForRange } from '../util/rateWindow';
 
-const ERROR_TAG = 'span_status_code';
-const DURATION_TAG = 'span_duration';
+const ERROR_TAG = 'status_code';
+const DURATION_TAG = 'duration';
 
 export function FilterBuilder(props: any) {
   const {

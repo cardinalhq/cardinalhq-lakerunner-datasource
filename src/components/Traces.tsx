@@ -16,13 +16,13 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { InlineFieldRow, Tab, TabsBar } from '@grafana/ui';
-import { MyQuery, Filter, TEXT_OPERATORS } from '../types';
+import { MyQuery, TEXT_OPERATORS } from '../types';
 import { DataSource } from '../datasource';
 import { useTags } from '../hooks/useTagKeys';
 import { FilterBuilder } from './FilterTags';
 import { PrismPromQLEditor } from './PrismEditor';
 import { buildLogQLFromQueryRaw, buildLogQLFromQueryRawForUI, buildLogQLExpressions } from '../util/LogqlBuilder';
-import { toInternalLabel } from '../services/tags';
+import { getSelectedTraceId } from '../services/traces';
 
 interface Props {
   datasourceId: number;
@@ -37,16 +37,6 @@ interface Props {
 
 const HIDDEN_TAGS = new Set<string>(['fingerprint', '_cardinalhq.fingerprint', '_cardinalhq_fingerprint']);
 const isHiddenTag = (t?: string) => !!t && HIDDEN_TAGS.has(t.replace(/^"|"$/g, ''));
-
-const getSelectedTraceId = (filters: Filter[]) =>
-  filters.find(
-    (f) =>
-      toInternalLabel(f.tag) === 'span_trace_id' &&
-      f.op === '=' &&
-      Array.isArray(f.value) &&
-      f.value.length === 1 &&
-      String(f.value[0]).trim() !== ''
-  )?.value?.[0];
 
 export default function TracesTab({ datasourceId, query, onChange, timeRange, labelsRefreshKey = 0 }: Props) {
   const subTab = (query.tracesSubTab as 'builder' | 'code') ?? 'builder';

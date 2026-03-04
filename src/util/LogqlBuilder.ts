@@ -14,7 +14,6 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-import { toInternalLabel } from 'services/tags';
 import { Filter, MyQuery, Operator } from '../types';
 
 const isNonEmpty = (s?: string) => !!s && s.trim().length > 0;
@@ -25,9 +24,9 @@ const normalizeWindow = (w: string) => (w === '__interval' ? '$__interval' : w);
 
 const HIDDEN_TAGS = new Set(['fingerprint', 'chq_fingerprint', '_cardinalhq_fingerprint']);
 const isHiddenTag = (tag: string) => HIDDEN_TAGS.has(tag);
-const MESSAGE_TAGS = new Set(['log_message']);
+const MESSAGE_TAG = 'message';
 
-const NUMERIC_AFTER_SELECTOR = new Set(['span_duration', 'span_duration']);
+const NUMERIC_AFTER_SELECTOR_TAG = 'duration';
 const isComparisonOp = (op?: Operator) => op === '<' || op === '<=' || op === '>' || op === '>=';
 
 function parseDurationToMs(v?: string): number | null {
@@ -63,16 +62,16 @@ function labelMatcher(f: Filter, hideHidden = false): string | null {
     return null;
   }
 
-  const tag = toInternalLabel(rawTag);
+  const tag = rawTag;
 
   if (hideHidden && isHiddenTag(tag)) {
     return null;
   }
-  if (MESSAGE_TAGS.has(tag)) {
+  if (tag === MESSAGE_TAG) {
     return null;
   }
 
-  if (NUMERIC_AFTER_SELECTOR.has(tag) && isComparisonOp(op as Operator)) {
+  if (tag === NUMERIC_AFTER_SELECTOR_TAG && isComparisonOp(op as Operator)) {
     return null;
   }
 
@@ -122,7 +121,7 @@ function selector(filters: Filter[], hideHidden = false): string {
 }
 
 function lineStage(f: Filter): string | null {
-  if (!MESSAGE_TAGS.has(f.tag)) {
+  if (f.tag !== MESSAGE_TAG) {
     return null;
   }
   const v = (f.value ?? []).find(isNonEmpty);
@@ -191,7 +190,7 @@ function buildLogQLExpressionsInternal(
 
   let numericStages = '';
   for (const f of labelFilters) {
-    if (NUMERIC_AFTER_SELECTOR.has(f.tag) && isComparisonOp(f.op as Operator)) {
+    if (f.tag === NUMERIC_AFTER_SELECTOR_TAG && isComparisonOp(f.op as Operator)) {
       const v = (f.value ?? []).find(isNonEmpty);
       const ms = parseDurationToMs(v);
       if (ms !== null) {

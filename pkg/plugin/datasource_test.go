@@ -440,11 +440,11 @@ func TestLogQueryWithSSE(t *testing.T) {
 		"mode": "logs",
 		"queryText": "alert",
 		"filters": [
-			{"tag": "log_level", "op": "in", "value": ["error", "warn"]}
+			{"tag": "level", "op": "in", "value": ["error", "warn"]}
 		],
 		"logqlAggregation": "sum",
 		"valueAs": "count_over_time",
-		"groupBy": ["log_level"]
+		"groupBy": ["level"]
 	}`)
 
 	resp, err := ds.QueryData(
@@ -516,7 +516,7 @@ func TestLogQueryEmptyResult(t *testing.T) {
 		"mode": "logs",
 		"queryText": "alert",
 		"filters": [
-			{"tag": "log_level", "op": "=", "value": ["critical"]}
+			{"tag": "level", "op": "=", "value": ["critical"]}
 		],
 		"logqlAggregation": "sum",
 		"valueAs": "count_over_time",
@@ -584,10 +584,10 @@ func TestLogQueryIgnoresHeartbeatBeforeDuringAndAfterDone(t *testing.T) {
 	queryJSON := `{
 		"mode": "logs",
 		"queryText": "alert",
-		"filters": [{"tag": "log_level", "op": "=", "value": ["error"]}],
+		"filters": [{"tag": "level", "op": "=", "value": ["error"]}],
 		"logqlAggregation": "sum",
 		"valueAs": "count_over_time",
-		"groupBy": ["log_level"]
+		"groupBy": ["level"]
 	}`
 
 	resp, err := ds.QueryData(
@@ -638,13 +638,13 @@ func TestBuildLogQL(t *testing.T) {
 			name: "count_over_time with sum aggregation",
 			query: queryModel{
 				Filters: []uiFilter{
-					{Tag: "log_level", Op: "=", Value: []string{"error"}},
+					{Tag: "level", Op: "=", Value: []string{"error"}},
 				},
 				LogqlAggregation: "sum",
 				ValueAs:          "count_over_time",
 			},
 			window:   "5m",
-			expected: `sum(count_over_time({log_level="error"}[5m]))`,
+			expected: `sum(count_over_time({level="error"}[5m]))`,
 		},
 		{
 			name: "filter with group by",
@@ -654,36 +654,36 @@ func TestBuildLogQL(t *testing.T) {
 				},
 				LogqlAggregation: "sum",
 				ValueAs:          "count_over_time",
-				GroupBy:          []string{"log_level"},
+				GroupBy:          []string{"level"},
 			},
 			window:   "5m",
-			expected: `sum by (log_level)(count_over_time({service="api"}[5m]))`,
+			expected: `sum by (level)(count_over_time({service="api"}[5m]))`,
 		},
 		{
 			name: "multiple filters",
 			query: queryModel{
 				Filters: []uiFilter{
 					{Tag: "env", Op: "=", Value: []string{"prod"}},
-					{Tag: "log_level", Op: "in", Value: []string{"error", "warn"}},
+					{Tag: "level", Op: "in", Value: []string{"error", "warn"}},
 				},
 				LogqlAggregation: "sum",
 				ValueAs:          "count_over_time",
 			},
 			window:   "5m",
-			expected: `sum(count_over_time({env="prod", log_level=~"^(?:error|warn)$"}[5m]))`,
+			expected: `sum(count_over_time({env="prod", level=~"^(?:error|warn)$"}[5m]))`,
 		},
 		{
 			name: "line filter (message contains)",
 			query: queryModel{
 				Filters: []uiFilter{
-					{Tag: "log_level", Op: "=", Value: []string{"error"}},
-					{Tag: "log_message", Op: "contains", Value: []string{"timeout"}},
+					{Tag: "level", Op: "=", Value: []string{"error"}},
+					{Tag: "message", Op: "contains", Value: []string{"timeout"}},
 				},
 				LogqlAggregation: "sum",
 				ValueAs:          "count_over_time",
 			},
 			window:   "5m",
-			expected: `sum(count_over_time({log_level="error"} |= "timeout"[5m]))`,
+			expected: `sum(count_over_time({level="error"} |= "timeout"[5m]))`,
 		},
 		{
 			name: "rate aggregation",
@@ -704,10 +704,10 @@ func TestBuildLogQL(t *testing.T) {
 					{Tag: "app", Op: "=", Value: []string{"myapp"}},
 				},
 				ValueAs: "count_over_time",
-				GroupBy: []string{"log_level"},
+				GroupBy: []string{"level"},
 			},
 			window:   "5m",
-			expected: `sum by (log_level)(count_over_time({app="myapp"}[5m]))`,
+			expected: `sum by (level)(count_over_time({app="myapp"}[5m]))`,
 		},
 	}
 

@@ -19,8 +19,7 @@ import { withHiddenFingerprint } from '../util/buildFinalLogQL';
 import { buildLogQLPlans } from 'util/LogqlBuilder';
 import { colorForSeries } from '../util/seriesColor';
 
-const norm = (t: string) => t.replace(/\./g, '_');
-const LEVEL_INTERNAL = norm('log_level');
+const LEVEL_FIELD = 'level';
 
 const replaceInterval = (expr: string, window: string) => expr.replace(/\[\s*\$?__interval\s*\]/g, `[${window}]`);
 
@@ -34,7 +33,7 @@ function ensureByLevel(expr: string): string {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
-  const want = [LEVEL_INTERNAL];
+  const want = [LEVEL_FIELD];
   const next = Array.from(new Set([...byList, ...want]));
   return `${agg} by (${next.join(',')})(${m[3]})`;
 }
@@ -233,7 +232,7 @@ export async function runLogQLQuery(
   const flushSeriesInto = (dst: DataFrame[]) => {
     for (const [name, s] of Object.entries(seriesMap)) {
       const lab = s.labels ?? {};
-      const lvlRaw = lab['log_level'] ?? lab['level'];
+      const lvlRaw = lab['level'];
       const levelStr = lvlRaw ? String(lvlRaw) : undefined;
       const fixedColor = levelStr ? levelColors[levelStr.toLowerCase()] : undefined;
       const pretty = prettyLabel(name);
@@ -272,11 +271,11 @@ export async function runLogQLQuery(
       }
     };
 
-    const MSG_TAGS = new Set(['message', 'log_message']);
+    const MSG_TAG = 'message';
 
     for (const f of Array.isArray(tgt?.filters) ? tgt.filters : []) {
       const tag = String(f?.tag ?? '');
-      if (!MSG_TAGS.has(tag)) {
+      if (tag !== MSG_TAG) {
         continue;
       }
 
@@ -337,7 +336,7 @@ export async function runLogQLQuery(
 
   const asTags = (d: any): Labels => d?.tags ?? d?.labels ?? d?.attributes ?? {};
   const asBody = (d: any, tags: Labels) =>
-    d?.body ?? d?.line ?? tags['log_message'] ?? tags['log.message'] ?? tags['message'] ?? '';
+    d?.body ?? d?.line ?? tags['message'] ?? '';
   const looksLikeVolumePoint = (d: any) => {
     const t = asTags(d);
     if (typeof d?.value === 'number' && t?.name === '__logql_logs_total') {
@@ -348,7 +347,6 @@ export async function runLogQLQuery(
       if (AGG_FUNCS.some((fn) => new RegExp(fn, 'i').test(lbl))) {
         if (
           !('message' in (t || {})) &&
-          !('log_message' in (t || {})) &&
           !('body' in (d || {})) &&
           !('line' in (d || {}))
         ) {
@@ -413,11 +411,11 @@ export async function runLogQLQuery(
         const ts = Number(d.timestamp);
         const val = Number(d.value);
         const tags: Labels = asTags(d) ?? {};
-        const levelVal = tags['log_level'] ?? tags['log_level'] ?? tags['level'];
+        const levelVal = tags['level'];
         const key =
           d.key ||
           (levelVal != null
-            ? `log_level=${levelVal}`
+            ? `level=${levelVal}`
             : Object.entries(tags)
                 .filter(([k]) => k !== 'name')
                 .sort(([a], [b]) => a.localeCompare(b))
@@ -434,7 +432,7 @@ export async function runLogQLQuery(
         const ts = Number(d.timestamp ?? Date.now());
         const tsNs = String(d.timestamp_ns ?? tags['chq_tsns'] ?? ts * 1_000_000);
         const body = String(asBody(d, tags));
-        const level = String(tags['log_level'] ?? tags['level'] ?? '');
+        const level = String(tags['level'] ?? '');
         const id = String(tags['chq_id'] ?? tags['id'] ?? '');
         const fp = String(tags['chq_fingerprint'] ?? tags['chq_id'] ?? tags['id'] ?? '');
         const base = baseLogLabelsFrom(tags, target);
