@@ -411,16 +411,13 @@ export async function runLogQLQuery(
         const ts = Number(d.timestamp);
         const val = Number(d.value);
         const tags: Labels = asTags(d) ?? {};
-        const levelVal = tags['level'];
         const key =
           d.key ||
-          (levelVal != null
-            ? `level=${levelVal}`
-            : Object.entries(tags)
-                .filter(([k]) => k !== 'name')
-                .sort(([a], [b]) => a.localeCompare(b))
-                .map(([k, v]) => `${k}=${v}`)
-                .join(', ') || 'series');
+          Object.entries(tags)
+            .filter(([k]) => k !== 'name')
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([k, v]) => `${k}=${v}`)
+            .join(', ') || 'series';
         if (!seriesMap[key]) {
           seriesMap[key] = { ts: [], vals: [], labels: tags };
         }
