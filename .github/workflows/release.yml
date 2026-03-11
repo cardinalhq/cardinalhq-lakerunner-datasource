@@ -24,16 +24,6 @@ jobs:
           persist-credentials: false
           fetch-depth: 0  # Fetch all history for changelog generation
 
-      - name: Verify signing token is configured
-        env:
-          GRAFANA_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
-        run: |
-          if [ -z "$GRAFANA_TOKEN" ]; then
-            echo "::error::GRAFANA_ACCESS_POLICY_TOKEN secret is not set. Cannot publish unsigned plugins."
-            exit 1
-          fi
-          echo "✓ Signing token is configured"
-
       - name: Verify tag matches package.json version
         run: |
           TAG_VERSION=${GITHUB_REF#refs/tags/v}
@@ -49,7 +39,8 @@ jobs:
         with:
           go-version: '1.26'
           node-version: '22'
-          policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+          # TODO: Re-enable signing when publishing to Grafana catalog
+          # policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
 
       - name: Get version from tag
         id: get_version

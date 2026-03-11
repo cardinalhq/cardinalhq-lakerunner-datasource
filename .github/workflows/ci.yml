@@ -21,8 +21,9 @@ jobs:
       plugin-version: ${{ steps.metadata.outputs.plugin-version }}
       has-e2e: ${{ steps.check-for-e2e.outputs.has-e2e }}
       has-backend: ${{ steps.check-for-backend.outputs.has-backend }}
-    env:
-      GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
+    # TODO: Re-enable signing when publishing to Grafana catalog
+    # env:
+    #   GRAFANA_ACCESS_POLICY_TOKEN: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
