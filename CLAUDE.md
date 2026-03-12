@@ -83,3 +83,38 @@ Both frontend services and backend handle Server-Sent Events with progressive fr
 
 ### Template Variables
 Supports `tag_keys()`, `tag_values(label)`, and `label_values(expr, label)` syntax with `dataset=logs|metrics|traces` parameter.
+
+## Releasing
+
+Releases are triggered by pushing git tags. The tag must match the version in `package.json`.
+
+```bash
+# 1. Bump version in package.json (tag must match)
+npm version <major|minor|patch> --no-git-tag-version
+
+# 2. Commit the version bump
+git add package.json package-lock.json
+git commit -m "v<new-version>"
+git push
+
+# 3. Tag and push
+git tag v<new-version>
+git push origin v<new-version>
+```
+
+Workflow: `.github/workflows/release.yml`
+- Triggers on `v*` tags
+- Verifies tag matches `package.json` version
+- Builds plugin via `grafana/plugin-actions/build-plugin`
+- Generates changelog from commits since previous tag
+- Publishes versioned + unversioned zip to GitHub Releases
+- RC tags (e.g., `v1.0.0-rc1`) are kept as draft releases
+
+The `/make-release` slash command automates steps 1-3.
+
+## Deployment
+
+Kubernetes manifests live in a separate repo:
+`cardinalhq/kubernetes-clusters` → `prod/global/grafana`
+
+After a release is published, update the Grafana plugin reference in that repo to point to the new version's zip from the GitHub Release.
