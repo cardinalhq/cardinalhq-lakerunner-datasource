@@ -87,6 +87,13 @@
   "overrides": {
     "serialize-javascript": ">=7.0.3",
     "minimatch": ">=3.1.4",
-    "ajv@<6.14.0": "6.14.0"
+    "ajv@<6.14.0": "6.14.0",
+    "flatted": ">=3.4.2",
+    "dompurify": ">=3.3.2",
+    "immutable": ">=5.1.5",
+    "@tootallnate/once": ">=3.0.1",
+    "sass": {
+      "immutable": ">=4.3.8"
+    }
   }
 }
