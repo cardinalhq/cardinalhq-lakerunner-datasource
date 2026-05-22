@@ -96,6 +96,7 @@
     "immutable": ">=5.1.5",
     "@tootallnate/once": ">=3.0.1",
     "uuid": ">=14.0.0",
+    "fast-uri": ">=3.1.2",
     "sass": {
       "immutable": ">=4.3.8"
     }
