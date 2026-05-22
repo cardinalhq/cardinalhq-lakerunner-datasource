@@ -22,7 +22,7 @@ type Mode = 'logs' | 'metrics' | 'traces';
 
 type UseLogQLTagValuesOpts = {
   enabled?: boolean;
-  datasourceId: number;
+  datasourceUid: string;
   tagName?: string;
   expr?: string;
   startTime?: number;
@@ -33,7 +33,7 @@ type UseLogQLTagValuesOpts = {
 
 export function useTagValues({
   enabled = true,
-  datasourceId,
+  datasourceUid,
   tagName,
   expr,
   startTime = Date.now() - 5 * 60_000,
@@ -47,7 +47,7 @@ export function useTagValues({
   const queryKey = [
     'tag-values',
     mode,
-    datasourceId,
+    datasourceUid,
     tagName ?? '__none__',
     expr ?? '__UNSCOPED__',
     truncateTo1Min(startTime),
@@ -68,7 +68,7 @@ export function useTagValues({
         return Promise.resolve<string[]>([]);
       }
       return fetchTagValues({
-        datasourceId,
+        datasourceUid,
         tagName: tagName!,
         expr,
         startTime,

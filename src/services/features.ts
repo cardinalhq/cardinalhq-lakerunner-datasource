@@ -22,8 +22,8 @@ const defaultFeatures: DataSourceFeatures = {
   metricsSummarySSE: false,
 };
 
-export async function fetchDataSourceFeatures(datasourceId: number, signal?: AbortSignal): Promise<DataSourceFeatures> {
-  const res = await fetch(`/api/datasources/${datasourceId}/resources/proxy-promql`, {
+export async function fetchDataSourceFeatures(datasourceUid: string, signal?: AbortSignal): Promise<DataSourceFeatures> {
+  const res = await fetch(`/api/datasources/uid/${datasourceUid}/resources/proxy-promql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

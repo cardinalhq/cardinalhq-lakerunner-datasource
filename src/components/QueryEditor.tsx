@@ -163,7 +163,7 @@ export function QueryEditor({
 
       {(query.mode ?? 'logs') === 'logs' && (
         <LogQLTab
-          datasourceId={datasource.id}
+          datasourceUid={datasource.uid}
           datasource={datasource}
           query={query}
           onChange={onChange}
@@ -186,7 +186,7 @@ export function QueryEditor({
 
       {query.mode === 'traces' && (
         <TracesTab
-          datasourceId={datasource.id}
+          datasourceUid={datasource.uid}
           datasource={datasource}
           query={query}
           onChange={onChange}

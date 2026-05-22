@@ -363,13 +363,13 @@ function looksTimeseriesResult(d: any): boolean {
 }
 
 async function streamSpans(
-  datasourceId: number,
+  datasourceUid: string,
   body: any,
   signal: AbortSignal,
   onTimeseries: (ts: number, val: number, label: string) => void,
   onRow: (ts: number, tags: Record<string, any>) => void
 ) {
-  const res = await fetch(`/api/datasources/${datasourceId}/resources/proxy-promql`, {
+  const res = await fetch(`/api/datasources/uid/${datasourceUid}/resources/proxy-promql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: `/api/v1/spans/query`, body }),
@@ -431,7 +431,7 @@ async function streamSpans(
 }
 
 export async function runTracesQuery(
-  datasourceId: number,
+  datasourceUid: string,
   instanceSettings: { uid: string; name: string },
   target: MyQuery,
   range: DataQueryRequest<MyQuery>['range'],
@@ -506,7 +506,7 @@ export async function runTracesQuery(
 
   if (aggregated) {
     await streamSpans(
-      datasourceId,
+      datasourceUid,
       { q: qPrimary, s: String(startMs), e: String(endMs), reverse: true, limit: 1000 },
       signal,
       (ts, val, label) => {
@@ -522,7 +522,7 @@ export async function runTracesQuery(
     const fallback = buildFilterExpr(target, '__interval');
     const qInner = extractInnerStream(qPrimary, fallback);
     await streamSpans(
-      datasourceId,
+      datasourceUid,
       { q: qInner, s: String(startMs), e: String(endMs), reverse: true, limit: 1000 },
       signal,
       () => {},
@@ -537,7 +537,7 @@ export async function runTracesQuery(
     );
   } else {
     await streamSpans(
-      datasourceId,
+      datasourceUid,
       { q: ensureStreamSelector(qPrimary), s: String(startMs), e: String(endMs), reverse: true, limit: 1000 },
       signal,
       (ts, val, label) => {

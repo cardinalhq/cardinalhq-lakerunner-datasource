@@ -21,7 +21,7 @@ export function queryTagName(tag: string): string {
 }
 
 export async function fetchTags(opts: {
-  datasourceId: number;
+  datasourceUid: string;
   mode?: Mode;
   startTime?: number;
   endTime?: number;
@@ -30,7 +30,7 @@ export async function fetchTags(opts: {
   metricName?: string;
   expr?: string; // Optional query expression for scoping available tags
 }): Promise<string[]> {
-  const { datasourceId, startTime, endTime, signal, setIsWaiting, mode = 'logs', metricName, expr } = opts;
+  const { datasourceUid, startTime, endTime, signal, setIsWaiting, mode = 'logs', metricName, expr } = opts;
 
   const s = String(startTime ?? Date.now() - 5 * 60_000);
   const e = String(endTime ?? Date.now());
@@ -48,7 +48,7 @@ export async function fetchTags(opts: {
       body.q = expr;
     }
 
-    const res = await fetch(`/api/datasources/${datasourceId}/resources/proxy-promql`, {
+    const res = await fetch(`/api/datasources/uid/${datasourceUid}/resources/proxy-promql`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -73,7 +73,7 @@ export async function fetchTags(opts: {
 }
 
 export async function fetchTagValues(opts: {
-  datasourceId: number;
+  datasourceUid: string;
   mode?: Mode;
   tagName: string;
   startTime?: number;
@@ -82,7 +82,7 @@ export async function fetchTagValues(opts: {
   signal?: AbortSignal;
   setIsWaiting?: (v: boolean) => void;
 }): Promise<string[]> {
-  const { datasourceId, tagName, startTime, mode = 'logs', endTime, expr, signal, setIsWaiting } = opts;
+  const { datasourceUid, tagName, startTime, mode = 'logs', endTime, expr, signal, setIsWaiting } = opts;
 
   const s = String(startTime ?? Date.now() - 5 * 60_000);
   const e = String(endTime ?? Date.now());
@@ -95,7 +95,7 @@ export async function fetchTagValues(opts: {
 
   try {
     setIsWaiting?.(true);
-    const res = await fetch(`/api/datasources/${datasourceId}/resources/proxy-promql`, {
+    const res = await fetch(`/api/datasources/uid/${datasourceUid}/resources/proxy-promql`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -148,13 +148,13 @@ export async function fetchTagValues(opts: {
 export type MetricKind = 'gauge' | 'sum' | 'histogram' | 'counter' | 'summary';
 
 export async function fetchMetricNames(opts: {
-  datasourceId: number;
+  datasourceUid: string;
   signal?: AbortSignal;
   startTime?: number;
   endTime?: number;
   setIsWaiting?: (v: boolean) => void;
 }): Promise<Array<{ metricName: string; metricType: MetricKind }>> {
-  const { datasourceId, signal, setIsWaiting } = opts;
+  const { datasourceUid, signal, setIsWaiting } = opts;
 
   const normalizeType = (t?: string): MetricKind => {
     const v = String(t ?? '').toLowerCase();
@@ -179,7 +179,7 @@ export async function fetchMetricNames(opts: {
   try {
     setIsWaiting?.(true);
 
-    const res = await fetch(`/api/datasources/${datasourceId}/resources/proxy-promql`, {
+    const res = await fetch(`/api/datasources/uid/${datasourceUid}/resources/proxy-promql`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

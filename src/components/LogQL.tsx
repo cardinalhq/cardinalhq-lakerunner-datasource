@@ -25,7 +25,7 @@ import { withHiddenFingerprint } from '../util/buildFinalLogQL';
 import { FilterBuilder } from './FilterTags';
 
 interface Props {
-  datasourceId: number;
+  datasourceUid: string;
   datasource: DataSource;
   query: MyQuery;
   onChange: (q: MyQuery) => void;
@@ -41,7 +41,7 @@ const MESSAGE_TAG = 'message';
 const SERVICE_NAME_TAG = 'service_name';
 
 export function LogQLTab({
-  datasourceId,
+  datasourceUid,
   datasource,
   query,
   onChange,
@@ -74,7 +74,7 @@ export function LogQLTab({
   }, [stableFiltersForLabels]);
 
   const { data: tags, loading } = useTags({
-    datasourceId,
+    datasourceUid,
     startTime: query.timeFrom,
     endTime: query.timeTo,
     enabled: true,
@@ -117,11 +117,11 @@ export function LogQLTab({
   const finalExprForUI = useMemo(() => builderExprForUI || '{}', [builderExprForUI]);
 
   const [codeDraft, setCodeDraft] = useState<string>(query.logqlOutput ?? '');
-  const prevDsRef = useRef(datasourceId);
+  const prevDsRef = useRef(datasourceUid);
 
   useEffect(() => {
-    if (prevDsRef.current !== datasourceId) {
-      prevDsRef.current = datasourceId;
+    if (prevDsRef.current !== datasourceUid) {
+      prevDsRef.current = datasourceUid;
       onChangeRef.current({
         ...queryRef.current,
         logqlOutput: undefined,
@@ -137,7 +137,7 @@ export function LogQLTab({
 
       setCodeDraft('');
     }
-  }, [datasourceId]);
+  }, [datasourceUid]);
 
   const groupByRef = useRef<string[]>(query.groupBy ?? []);
   useEffect(() => {
@@ -263,7 +263,7 @@ export function LogQLTab({
       {subTab === 'builder' && (
         <>
           <FilterBuilder
-            datasourceId={datasourceId}
+            datasourceUid={datasourceUid}
             tags={mergedTags}
             loadingTags={loading}
             filters={visibleFilters.length ? visibleFilters : [{ tag: SERVICE_NAME_TAG, op: '=', value: [''] }]}

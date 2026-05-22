@@ -27,7 +27,7 @@ const DURATION_TAG = 'duration';
 
 export function FilterBuilder(props: any) {
   const {
-    datasourceId,
+    datasourceUid,
     filters,
     onFiltersChange,
     groupBy,
@@ -92,7 +92,7 @@ export function FilterBuilder(props: any) {
   }, [mode, metricName, stableFilters, startTime, endTime]);
 
   const { data: internalTags = [], loading: internalLoading } = useTags({
-    datasourceId,
+    datasourceUid,
     startTime,
     endTime,
     enabled: mode === 'metrics' && !!metricName,
@@ -182,7 +182,7 @@ export function FilterBuilder(props: any) {
         {userFilters.length === 0 && (
           <FilterRow
             key="blank"
-            datasourceId={datasourceId}
+            datasourceUid={datasourceUid}
             filter={{ tag: '', op: '=' as Operator, value: [''] }}
             index={0}
             filters={[{ tag: '', op: '=' as Operator, value: [''] }]}
@@ -214,7 +214,7 @@ export function FilterBuilder(props: any) {
         {userFilters.map((f: Filter, i: number) => (
           <FilterRow
             key={`user-${i}`}
-            datasourceId={datasourceId}
+            datasourceUid={datasourceUid}
             filter={f}
             index={i}
             filters={userFilters}
@@ -332,7 +332,7 @@ export function FilterBuilder(props: any) {
       {userFilters.length === 0 && (
         <FilterRow
           key="blank"
-          datasourceId={datasourceId}
+          datasourceUid={datasourceUid}
           filter={{ tag: '', op: '=' as Operator, value: [''] }}
           index={0}
           filters={[{ tag: '', op: '=' as Operator, value: [''] }]}
@@ -364,7 +364,7 @@ export function FilterBuilder(props: any) {
       {userFilters.map((f: Filter, i: number) => (
         <FilterRow
           key={`user-${i}`}
-          datasourceId={datasourceId}
+          datasourceUid={datasourceUid}
           filter={f}
           index={i}
           filters={userFilters}
@@ -402,7 +402,7 @@ export function FilterBuilder(props: any) {
       {pinnedFilters.map((f: Filter) => (
         <FilterRow
           key={`pinned-${f.tag}`}
-          datasourceId={datasourceId}
+          datasourceUid={datasourceUid}
           filter={f}
           index={-1}
           filters={pinnedFilters}

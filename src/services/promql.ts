@@ -51,13 +51,13 @@ type SeriesBuf = { timestamps: number[]; values: number[]; tags?: Record<string,
  * Used for value-based filtering before fetching full time series data.
  */
 export async function fetchMetricsSummary(
-  dataSourceId: number,
+  dataSourceUid: string,
   query: string,
   startTime: number,
   endTime: number,
   signal: AbortSignal
 ): Promise<SeriesSummary[]> {
-  const response = await fetch(`/api/datasources/${dataSourceId}/resources/proxy-promql`, {
+  const response = await fetch(`/api/datasources/uid/${dataSourceUid}/resources/proxy-promql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -129,7 +129,7 @@ export async function fetchMetricsSummary(
 }
 
 export async function runPromQLQuery(
-  dataSourceId: number,
+  dataSourceUid: string,
   target: MyQuery,
   range: DataQueryRequest['range'],
   signal: AbortSignal,
@@ -145,7 +145,7 @@ export async function runPromQLQuery(
   let allowedLabels: Set<string> | null = null;
   if (supportsMetricsSummarySSE && threshold?.enabled && promql) {
     try {
-      const summaries = await fetchMetricsSummary(dataSourceId, promql, startTime, endTime, signal);
+      const summaries = await fetchMetricsSummary(dataSourceUid, promql, startTime, endTime, signal);
       // Filter to only series that match the threshold
       const matchingSummaries = summaries.filter((s) => matchesThreshold(s, threshold));
 
@@ -170,7 +170,7 @@ export async function runPromQLQuery(
     }
   }
 
-  const response = await fetch(`/api/datasources/${dataSourceId}/resources/proxy-promql`, {
+  const response = await fetch(`/api/datasources/uid/${dataSourceUid}/resources/proxy-promql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
