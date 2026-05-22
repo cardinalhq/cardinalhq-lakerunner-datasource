@@ -426,8 +426,11 @@ export async function runLogQLQuery(
         seen++;
       } else {
         const tags: Labels = asTags(d) ?? {};
-        const ts = Number(d.timestamp ?? Date.now());
-        const tsNs = String(d.timestamp_ns ?? tags['chq_tsns'] ?? ts * 1_000_000);
+        // chq_tsns (epoch nanoseconds) is the source of truth for time. chq_timestamp,
+        // the redundant millisecond copy, is going away, so derive ms from chq_tsns and
+        // only fall back to the SSE timestamp when chq_tsns is absent.
+        const tsNs = String(tags['chq_tsns'] ?? d.timestamp_ns ?? Number(d.timestamp ?? Date.now()) * 1_000_000);
+        const ts = Number(BigInt(tsNs) / BigInt(1_000_000));
         const body = String(asBody(d, tags));
         const level = String(tags['level'] ?? '');
         // chq_fingerprint is a similarity/clustering key, not unique per row, so it

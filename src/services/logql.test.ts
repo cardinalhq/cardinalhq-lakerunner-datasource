@@ -85,4 +85,27 @@ describe('runLogQLQuery log row id', () => {
     // fingerprint is the (shared, non-unique) similarity key, not the row id
     expect(fingerprints).toEqual(['12345', '12345']);
   });
+
+  it('derives the row timestamp (ms) from chq_tsns, not the redundant chq_timestamp', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: mockSSEBody([
+        // one row carries a (going-away) ms timestamp that disagrees with chq_tsns;
+        // the other has no ms timestamp at all. Both must resolve from chq_tsns.
+        'data: {"type":"result","data":{"timestamp":1500,"tags":{"chq_tsns":"1700000000000000000","chq_fingerprint":1,"message":"a"}}}\n',
+        'data: {"type":"result","data":{"tags":{"chq_tsns":"1700000000123000000","chq_fingerprint":1,"message":"b"}}}\n',
+        'data: {"type":"done","data":{"status":"ok"}}\n',
+      ]),
+      text: async () => '',
+    } as any);
+
+    const frames = await runLogQLQuery('uid-1', target, range, new AbortController().signal);
+    const logs = frames.find((f: any) => f.name === 'logs') as any;
+    const times = logs.fields.find((x: any) => x.name === 'timestamp').values as number[];
+
+    // 1.7e18 ns -> 1.7e12 ms; the bogus 1500 ms timestamp is ignored.
+    expect(times).toEqual(expect.arrayContaining([1700000000000, 1700000000123]));
+    expect(times).not.toContain(1500);
+  });
 });
