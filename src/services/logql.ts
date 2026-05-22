@@ -430,8 +430,10 @@ export async function runLogQLQuery(
         const tsNs = String(d.timestamp_ns ?? tags['chq_tsns'] ?? ts * 1_000_000);
         const body = String(asBody(d, tags));
         const level = String(tags['level'] ?? '');
-        const id = String(tags['chq_id'] ?? tags['id'] ?? '');
-        const fp = String(tags['chq_fingerprint'] ?? tags['chq_id'] ?? tags['id'] ?? '');
+        // chq_fingerprint is a similarity/clustering key, not unique per row, so it
+        // can't be the Grafana row id. The data has no unique id column; chq_tsns is
+        // unique per row, paired with the row index to stay collision-proof in a frame.
+        const fp = String(tags['chq_fingerprint'] ?? '');
         const base = baseLogLabelsFrom(tags, target);
         if (timestamps.length < MAX_INITIAL) {
           timestamps.push(ts);
@@ -440,7 +442,7 @@ export async function runLogQLQuery(
           nanosArr.push(nanos);
           bodies.push(body);
           severities.push(level);
-          ids.push(id);
+          ids.push(`${tsNs}_${ids.length}`);
           labelsArr.push(base);
           fingerprints.push(fp);
         }
