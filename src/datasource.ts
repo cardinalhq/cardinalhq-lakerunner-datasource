@@ -43,6 +43,10 @@ export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
   implements DataSourceWithSupplementaryQueriesSupport<MyQuery>
 {
+  // Grafana 13 widened DataSourceApi.id to `number | undefined`; an instantiated
+  // datasource always has the numeric instanceSettings.id, so narrow it back.
+  declare readonly id: number;
+
   getDefaultQuery(_: CoreApp): Partial<MyQuery> {
     return {
       refId: 'A',
