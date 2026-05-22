@@ -34,7 +34,7 @@ interface SelectedLogModalProps {
   onClose: () => void;
   filters: any[];
   timeRange: { startTime: number; endTime: number };
-  datasourceId: number;
+  datasourceUid: string;
 }
 
 function getDataTypeOfRecognizer(name: string): 'string' | 'number' {
@@ -71,7 +71,7 @@ export const SelectedLogModal: React.FC<SelectedLogModalProps> = ({
   onClose,
   filters,
   timeRange,
-  datasourceId,
+  datasourceUid,
   fingerprint,
 }) => {
   const theme = useTheme();

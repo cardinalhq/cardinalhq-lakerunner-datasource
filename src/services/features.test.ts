@@ -30,7 +30,7 @@ describe('fetchDataSourceFeatures', () => {
       json: async () => ({ features: { metricsSummarySSE: true } }),
     } as any);
 
-    await expect(fetchDataSourceFeatures(7)).resolves.toEqual({ metricsSummarySSE: true });
+    await expect(fetchDataSourceFeatures('uid-7')).resolves.toEqual({ metricsSummarySSE: true });
   });
 
   it('returns defaults when response is not ok', async () => {
@@ -39,7 +39,7 @@ describe('fetchDataSourceFeatures', () => {
       status: 404,
     } as any);
 
-    await expect(fetchDataSourceFeatures(7)).resolves.toEqual({ metricsSummarySSE: false });
+    await expect(fetchDataSourceFeatures('uid-7')).resolves.toEqual({ metricsSummarySSE: false });
   });
 });
 

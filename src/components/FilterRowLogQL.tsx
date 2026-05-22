@@ -40,7 +40,7 @@ const VALUE_AS_OPTIONS_LOGS_BASE = VALUE_AS_OPTIONS.filter((o) => o.value !== 'v
 type Mode = 'logs' | 'metrics' | 'traces';
 
 export function FilterRow(props: {
-  datasourceId: number;
+  datasourceUid: string;
   index: number;
   filter: Filter;
   filters: Filter[];
@@ -74,7 +74,7 @@ export function FilterRow(props: {
   onFieldsChange?: (fields: string[]) => void;
 }) {
   const {
-    datasourceId,
+    datasourceUid,
     index,
     filter,
     filters,
@@ -244,7 +244,7 @@ export function FilterRow(props: {
 
   const { values: tagValues, loading: loadingValues } = useTagValues({
     enabled: enableTagValues,
-    datasourceId,
+    datasourceUid,
     tagName: filter.tag,
     expr: scopeExpr,
     startTime,

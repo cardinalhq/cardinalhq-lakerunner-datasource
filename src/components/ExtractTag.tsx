@@ -183,7 +183,7 @@ export const ExtractTagsComponent: React.FC<ExtractTagsComponentProps> = ({
           startTime: modalTimeRange?.startTime ?? 0,
           endTime: modalTimeRange?.endTime ?? 0,
         }}
-        datasourceId={datasource.id}
+        datasourceUid={datasource.uid}
       />
     </>
   );

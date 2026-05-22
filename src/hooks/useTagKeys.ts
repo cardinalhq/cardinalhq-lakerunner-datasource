@@ -21,7 +21,7 @@ import { Filter } from '../types';
 type Mode = 'logs' | 'metrics' | 'traces';
 
 type Options = {
-  datasourceId: number;
+  datasourceUid: string;
   startTime?: number;
   endTime?: number;
   enabled?: boolean;
@@ -42,7 +42,7 @@ function buildKey(filters?: Filter[]): string {
 }
 
 export function useTags({
-  datasourceId,
+  datasourceUid,
   startTime = Date.now() - 5 * 60_000,
   endTime = Date.now(),
   enabled = true,
@@ -61,7 +61,7 @@ export function useTags({
   const queryKey = [
     'tags',
     mode,
-    datasourceId,
+    datasourceUid,
     modeKeyPart,
     filterKey,
     expr ?? '',
@@ -81,7 +81,7 @@ export function useTags({
     enabled: canFetch,
     queryFn: ({ signal }) =>
       fetchTags({
-        datasourceId,
+        datasourceUid,
         startTime,
         endTime,
         setIsWaiting,

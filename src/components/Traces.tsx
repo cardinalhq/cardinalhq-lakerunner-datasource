@@ -25,7 +25,7 @@ import { buildLogQLFromQueryRaw, buildLogQLFromQueryRawForUI, buildLogQLExpressi
 import { getSelectedTraceId } from '../services/traces';
 
 interface Props {
-  datasourceId: number;
+  datasourceUid: string;
   datasource: DataSource;
   query: MyQuery;
   onChange: (q: MyQuery) => void;
@@ -38,7 +38,7 @@ interface Props {
 const HIDDEN_TAGS = new Set<string>(['fingerprint', '_cardinalhq.fingerprint', '_cardinalhq_fingerprint']);
 const isHiddenTag = (t?: string) => !!t && HIDDEN_TAGS.has(t.replace(/^"|"$/g, ''));
 
-export default function TracesTab({ datasourceId, query, onChange, timeRange, labelsRefreshKey = 0 }: Props) {
+export default function TracesTab({ datasourceUid, query, onChange, timeRange, labelsRefreshKey = 0 }: Props) {
   const subTab = (query.tracesSubTab as 'builder' | 'code') ?? 'builder';
 
   const onChangeRef = useRef(onChange);
@@ -65,7 +65,7 @@ export default function TracesTab({ datasourceId, query, onChange, timeRange, la
   }, [stableFiltersForLabels]);
 
   const { data: tags, loading } = useTags({
-    datasourceId,
+    datasourceUid,
     startTime: query.timeFrom,
     endTime: query.timeTo,
     enabled: query.mode === 'traces',
@@ -104,10 +104,10 @@ export default function TracesTab({ datasourceId, query, onChange, timeRange, la
 
   const [codeDraft, setCodeDraft] = useState<string>(query.tracesOutput ?? '');
 
-  const prevDsRef = useRef(datasourceId);
+  const prevDsRef = useRef(datasourceUid);
   useEffect(() => {
-    if (prevDsRef.current !== datasourceId) {
-      prevDsRef.current = datasourceId;
+    if (prevDsRef.current !== datasourceUid) {
+      prevDsRef.current = datasourceUid;
       onChangeRef.current({
         ...query,
         tracesSubTab: 'builder',
@@ -120,7 +120,7 @@ export default function TracesTab({ datasourceId, query, onChange, timeRange, la
       });
       setCodeDraft('');
     }
-  }, [datasourceId, query]);
+  }, [datasourceUid, query]);
 
   useEffect(() => {
     if (subTab === 'builder' && builderExpr !== query.tracesBuilderExp) {
@@ -183,7 +183,7 @@ export default function TracesTab({ datasourceId, query, onChange, timeRange, la
       {subTab === 'builder' && (
         <>
           <FilterBuilder
-            datasourceId={datasourceId}
+            datasourceUid={datasourceUid}
             tags={mergedTags}
             loadingTags={loading}
             filters={visibleFilters.length ? visibleFilters : [{ tag: '', op: '=', value: [''] }]}

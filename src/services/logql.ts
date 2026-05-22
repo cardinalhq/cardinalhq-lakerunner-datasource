@@ -135,7 +135,7 @@ function looksAggregated(expr: string): boolean {
 }
 
 export async function runLogQLQuery(
-  datasourceId: number,
+  datasourceUid: string,
   target: any,
   range: DataQueryRequest['range'],
   signal: AbortSignal,
@@ -196,7 +196,7 @@ export async function runLogQLQuery(
     body.fields = fields;
   }
 
-  const res = await fetch(`/api/datasources/${datasourceId}/resources/proxy-promql`, {
+  const res = await fetch(`/api/datasources/uid/${datasourceUid}/resources/proxy-promql`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: `/api/v1/logs/query`, body }),

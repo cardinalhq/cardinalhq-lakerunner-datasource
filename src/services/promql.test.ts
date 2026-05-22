@@ -81,7 +81,7 @@ describe('runPromQLQuery threshold behavior', () => {
     };
 
     const frames = await runPromQLQuery(
-      5,
+      'uid-5',
       target,
       {
         from: { valueOf: () => 1000 } as any,
@@ -155,7 +155,7 @@ describe('runPromQLQuery legendFormat', () => {
     };
 
     const frames = await runPromQLQuery(
-      1,
+      'uid-1',
       target,
       { from: { valueOf: () => 0 } as any, to: { valueOf: () => 2000 } as any } as any,
       new AbortController().signal
@@ -190,7 +190,7 @@ describe('runPromQLQuery legendFormat', () => {
     };
 
     const frames = await runPromQLQuery(
-      1,
+      'uid-1',
       target,
       { from: { valueOf: () => 0 } as any, to: { valueOf: () => 2000 } as any } as any,
       new AbortController().signal
@@ -222,7 +222,7 @@ describe('runPromQLQuery legendFormat', () => {
     };
 
     const frames = await runPromQLQuery(
-      1,
+      'uid-1',
       target,
       { from: { valueOf: () => 0 } as any, to: { valueOf: () => 2000 } as any } as any,
       new AbortController().signal
@@ -255,7 +255,7 @@ describe('runPromQLQuery legendFormat', () => {
     };
 
     const frames = await runPromQLQuery(
-      1,
+      'uid-1',
       target,
       { from: { valueOf: () => 0 } as any, to: { valueOf: () => 2000 } as any } as any,
       new AbortController().signal

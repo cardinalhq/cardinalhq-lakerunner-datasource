@@ -58,7 +58,7 @@ export function MetricsTab(props: {
   const subTab: 'builder' | 'code' = (query.promqlSubTab as any) ?? 'builder';
   const [supportsValueThresholdFilter, setSupportsValueThresholdFilter] = useState(false);
 
-  const { data: metricOptions = [] } = useMetricNames(datasource.id, setIsWaiting);
+  const { data: metricOptions = [] } = useMetricNames(datasource.uid, setIsWaiting);
 
   const visibleFilters: Filter[] = useMemo(
     () => (query.filters ?? []).filter((f) => !isHiddenTag(f.tag)),
@@ -91,7 +91,7 @@ export function MetricsTab(props: {
     }
   }, [query, rateWindow]);
 
-  const prevDsRef = useRef(datasource.id);
+  const prevDsRef = useRef(datasource.uid);
 
   const onChangeRef = useRef(onChange);
   useEffect(() => {
@@ -104,8 +104,8 @@ export function MetricsTab(props: {
   }, [query]);
 
   useEffect(() => {
-    if (prevDsRef.current !== datasource.id) {
-      prevDsRef.current = datasource.id;
+    if (prevDsRef.current !== datasource.uid) {
+      prevDsRef.current = datasource.uid;
       onChangeRef.current({
         ...queryRef.current,
         metricName: undefined,
@@ -116,7 +116,7 @@ export function MetricsTab(props: {
       setCodeDraft('');
       setLastBuilderExpr('');
     }
-  }, [datasource.id]);
+  }, [datasource.uid]);
 
   useEffect(() => {
     if (subTab !== 'builder') {
@@ -242,7 +242,7 @@ export function MetricsTab(props: {
           </InlineFieldRow>
 
           <FilterBuilder
-            datasourceId={datasource.id}
+            datasourceUid={datasource.uid}
             filters={filters}
             onFiltersChange={(next: any) => onChange({ ...query, filters: next })}
             groupBy={query.groupBy ?? []}

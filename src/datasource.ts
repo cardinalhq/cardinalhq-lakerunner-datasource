@@ -43,10 +43,6 @@ export class DataSource
   extends DataSourceApi<MyQuery, MyDataSourceOptions>
   implements DataSourceWithSupplementaryQueriesSupport<MyQuery>
 {
-  // Grafana 13 widened DataSourceApi.id to `number | undefined`; an instantiated
-  // datasource always has the numeric instanceSettings.id, so narrow it back.
-  declare readonly id: number;
-
   getDefaultQuery(_: CoreApp): Partial<MyQuery> {
     return {
       refId: 'A',
@@ -217,7 +213,7 @@ export class DataSource
 
   private async getFeatures(): Promise<DataSourceFeatures> {
     if (!this.featuresPromise) {
-      this.featuresPromise = fetchDataSourceFeatures(this.id).catch(() => ({ metricsSummarySSE: false }));
+      this.featuresPromise = fetchDataSourceFeatures(this.uid).catch(() => ({ metricsSummarySSE: false }));
     }
     return this.featuresPromise;
   }
@@ -370,7 +366,7 @@ export class DataSource
     const e = options?.range?.to?.valueOf?.() ?? this.getDefaultRange().e;
     if (kind === 'keys') {
       const keys = await fetchTagKeys({
-        datasourceId: this.id,
+        datasourceUid: this.uid,
         mode: dataset,
         startTime: s,
         endTime: e,
@@ -382,7 +378,7 @@ export class DataSource
       return [];
     }
     const vals = await fetchTagValues({
-      datasourceId: this.id,
+      datasourceUid: this.uid,
       mode: dataset,
       tagName,
       startTime: s,
@@ -398,7 +394,7 @@ export class DataSource
     const dataset: 'logs' | 'metrics' | 'traces' = options?.dataset ?? 'logs';
     const metricName: string | undefined = options?.metricName;
     const keys = await fetchTagKeys({
-      datasourceId: this.id,
+      datasourceUid: this.uid,
       mode: dataset,
       startTime: s,
       endTime: e,
@@ -417,7 +413,7 @@ export class DataSource
     const dataset: 'logs' | 'metrics' | 'traces' = options?.dataset ?? 'logs';
     const expr: string | undefined = options?.expr;
     const vals = await fetchTagValues({
-      datasourceId: this.id,
+      datasourceUid: this.uid,
       mode: dataset,
       tagName,
       startTime: s,
@@ -520,7 +516,7 @@ export class DataSource
     const mode = target.mode ?? 'logs';
     if (mode === 'metrics') {
       const supportsMetricsSummarySSE = await this.supportsMetricsSummarySSE();
-      return runPromQLQuery(this.id, target, range, signal, emit, supportsMetricsSummarySSE);
+      return runPromQLQuery(this.uid, target, range, signal, emit, supportsMetricsSummarySSE);
     }
     if (mode === 'traces') {
       const key = this.normalizeRefId(target.refId);
@@ -532,7 +528,7 @@ export class DataSource
       }
       this.prevTopFilter[key] = topFilter;
       return runTracesQuery(
-        this.id,
+        this.uid,
         { uid: this.instanceSettings.uid!, name: this.instanceSettings.name! },
         target,
         range,
@@ -547,7 +543,7 @@ export class DataSource
         this.clearLogs(key);
         this.prevTopFilter[key] = currentFilterKey;
       }
-      const frames = await runLogQLQuery(this.id, target, range, signal, emit);
+      const frames = await runLogQLQuery(this.uid, target, range, signal, emit);
       this.ingestLogsFromFrames(target.refId, frames);
       return frames;
     }
