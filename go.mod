@@ -1,6 +1,6 @@
 module github.com/cardinalhq/cardinalhq-datasource
 
-go 1.26
+go 1.26.5
 
 require github.com/grafana/grafana-plugin-sdk-go v0.292.0
 
