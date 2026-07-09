@@ -37,7 +37,7 @@ jobs:
 
       - uses: grafana/plugin-actions/build-plugin@main # zizmor: ignore[unpinned-uses] provided by grafana
         with:
-          go-version: '1.26'
+          go-version: '1.26.5'
           node-version: '22'
           # TODO: Re-enable signing when publishing to Grafana catalog
           # policy_token: ${{ secrets.GRAFANA_ACCESS_POLICY_TOKEN }}
