@@ -96,19 +96,19 @@
     "@babel/core": ">=7.29.6",
     "form-data": ">=4.0.6",
     "ws": ">=8.21.0",
-    "js-yaml": ">=4.3.0",
+    "js-yaml": ">=4.3.0 <5",
     "@opentelemetry/core": ">=2.8.0",
-    "immutable": ">=5.1.8",
+    "immutable": ">=5.1.8 <6",
     "@tootallnate/once": ">=3.0.1",
     "uuid": ">=14.0.0",
-    "fast-uri": ">=3.1.4",
+    "fast-uri": ">=3.1.4 <4",
     "sass": {
       "immutable": ">=4.3.8"
     },
     "brace-expansion": ">=5.0.7",
     "js-cookie": ">=3.0.7",
     "qs": ">=6.15.2",
-    "react-router": ">=8.3.0",
+    "react-router": ">=7.18.0 <8",
     "websocket-driver": ">=0.7.5",
     "ahooks": {
       "js-cookie": ">=3.0.7"
